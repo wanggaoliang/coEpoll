@@ -11,34 +11,26 @@ EPoller::~EPoller()
     ::close(epoll_fd_);
 }
 
-void EPoller::add(int fd, uint32_t events)
+void EPoller::updateWQ(int op, WQAbstract *WQA)
 {
     epoll_event event;
-    event.data.fd = fd;
-    event.events = events;
-    epoll_ctl(epoll_fd_, EPOLL_CTL_ADD, fd, &event);
+    event.data.ptr = WQA;
+    event.events = WQA->getWEvents();
+    epoll_ctl(epoll_fd_, op, WQA->getFd(), &event);
 }
 
-void EPoller::modify(int fd, uint32_t events)
+int EPoller::wait(int timeout)
 {
-    epoll_event event;
-    event.data.fd = fd;
-    event.events = events;
-    epoll_ctl(epoll_fd_, EPOLL_CTL_MOD, fd, &event);
-}
-
-void EPoller::remove(int fd)
-{
-    epoll_ctl(epoll_fd_, EPOLL_CTL_DEL, fd, nullptr);
-}
-
-int EPoller::wait(std::vector<epoll_event> &events, int timeout)
-{
-    int num_events = epoll_wait(epoll_fd_, events.data(), events.size(), timeout);
+    int num_events = epoll_wait(epoll_fd_, events_, 128, timeout);
     if (num_events < 0)
     {
         return num_events;
     }
-    events.resize(num_events);
+    for (int i = 0;i < num_events;i++)
+    {
+        WQAbstract *WQA = static_cast<WQAbstract *>(events_[i].data.ptr);
+        WQA->setREvents(events_[i].events);
+        WQA->wakeup();
+    }
     return num_events;
 }

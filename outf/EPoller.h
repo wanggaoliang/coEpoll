@@ -1,8 +1,6 @@
-#ifndef EPOLL_H
 #pragma once
-
 #include <sys/epoll.h>
-#include <vector>
+#include "WQAbstract.h"
 
 class EPoller
 {
@@ -10,11 +8,10 @@ public:
     EPoller();
     ~EPoller();
 
-    void add(int fd, uint32_t events);
-    void modify(int fd, uint32_t events);
-    void remove(int fd);
-    int wait(std::vector<epoll_event> &events, int timeout);
+    void updateWQ(int, WQAbstract*);
+    int wait(int timeout);
 
 private:
     int epoll_fd_;
+    epoll_event events_[128];
 };

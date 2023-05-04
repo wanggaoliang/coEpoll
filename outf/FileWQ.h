@@ -11,35 +11,36 @@ public:
     {
         WQCallback func_;
         uint32_t events_;
-        bool exclusive_;
-        waitItem(const WQCallback &func, uint32_t events, bool exclusive)
-            :func_(func), events_(events), exclusive_(exclusive)
+        waitItem(const WQCallback &func, uint32_t events)
+            :func_(func), events_(events)
         {}
-        waitItem(WQCallback &&func, uint32_t events, bool exclusive)
-            :func_(std::move(func)), events_(events), exclusive_(exclusive)
+        waitItem(WQCallback &&func, uint32_t events)
+            :func_(std::move(func)), events_(events)
         {}
     };
 
-    FileWQ(int fd_):fd(fd_)
+    FileWQ(int fd):WQAbstract(fd)
     {
 
     }
 
     ~FileWQ() = default;
-    void wakeup(uint32_t revent) override
+    void wakeup() override
     {
-        bool done = false;
         for (auto iter = items.begin(); iter != items.end(); )
         {
-            if (iter->events_ & revent)
+            if (!revents_)
             {
-                iter->func_();
-                done = iter->exclusive_;
-                iter = items.erase(iter);
-                if (done)
+                break;
+            }
+            else if (iter->events_ & revents_)
+            {
+                if (wakeCallback)
                 {
-                    break;
+                    wakeCallback(std::move(iter->func_));
                 }
+                iter = items.erase(iter);
+                revents_ &= ~(iter->events_ & revents_);
             }
             else
             {
@@ -48,12 +49,18 @@ public:
         }
     }
 
-    template<IsWQCallback T>
-    void addWait(T &&func, uint32_t events, bool exclusive = false)
+    template<WQCallbackType T>
+    void addWait(T &&func, uint32_t events)
     {
-        items.emplace_back(std::forward(func), events, exclusive);
+        items.emplace_back(std::forward(func), events);
+    }
+
+    template<WakeCallbackType T>
+    void setWakeCallback(T &&func)
+    {
+        wakeCallback = std::forward(func);
     }
 private:
     std::list<waitItem> items;
-    int fd;
+    WakeCallback wakeCallback;
 };
