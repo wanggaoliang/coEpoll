@@ -36,13 +36,13 @@ public:
         bool operator>(const WaitItem &t) const { return when_ > t.when_; }
     };
 
-    TimeWQ();
-    
-    TimeWQ(int fd);
+    TimeWQ(void *);
+
+    TimeWQ(int, void *);
 
     ~TimeWQ();
 
-    void wakeup(uint32_t revent) override;
+    void wakeup() override;
 
     template<WQCallbackType T>
     void addWait(T &&cb, const TimePoint &when)

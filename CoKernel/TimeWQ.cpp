@@ -5,12 +5,12 @@
 #include <unistd.h>
 
 
-TimeWQ::TimeWQ()
+TimeWQ::TimeWQ(void *core):WQAbstract(-1, core)
 {
     fd_ = ::timerfd_create(CLOCK_MONOTONIC, TFD_NONBLOCK | TFD_CLOEXEC);
 }
 
-TimeWQ::TimeWQ(int fd):WQAbstract(fd)
+TimeWQ::TimeWQ(int fd,void* core):WQAbstract(fd,core)
 {}
 
 TimeWQ::~TimeWQ()
@@ -22,7 +22,7 @@ TimeWQ::~TimeWQ()
     }
 }
 
-void TimeWQ::wakeup(uint32_t revent)
+void TimeWQ::wakeup()
 {
     const auto now = std::chrono::steady_clock::now();
     readTimerfd();

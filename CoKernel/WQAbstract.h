@@ -5,7 +5,7 @@
 class WQAbstract
 {
 public:
-    WQAbstract(int fd):revents_(0), wevents_(0),fd_(fd){}
+    WQAbstract(int fd,void* core):revents_(0), wevents_(0),fd_(fd),core_(core){}
     ~WQAbstract() {}
     virtual void wakeup() = 0;
     void setREvents(uint32_t revents)
@@ -25,13 +25,18 @@ public:
     {
         return wevents_;
     }
+    
     int getFd() const
     {
         return fd_;
     }
+
+    
 protected:
     uint32_t revents_;
     uint32_t wevents_;
+
+    void *core_;
     int fd_;
 };
 

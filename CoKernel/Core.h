@@ -6,11 +6,9 @@
 #include <memory>
 #include <vector>
 #include <queue>
-#include <mutex>
 #include <map>
 #include <chrono>
 #include <limits>
-#include <atomic>
 
 enum
 {
@@ -26,29 +24,13 @@ enum
  * the event loop of the thread it belongs to, or call that thread the thread of
  * the event loop.
  */
-class EventLoop : NonCopyable
+class Core : NonCopyable
 {
 public:
     using FileWQMap = std::map<int, std::shared_ptr<FileWQ>>;
     
-    EventLoop();
-    ~EventLoop();
-
-    
-
-
-
-    /**
-     * @brief Return true if the event loop is running.
-     *
-     * @return true
-     * @return false
-     */
-    bool isRunning()
-    {
-        return looping_.load(std::memory_order_acquire) &&
-               (!quit_.load(std::memory_order_acquire));
-    }
+    Core();
+    ~Core();
 
     void run();
     
@@ -57,7 +39,7 @@ public:
     void removeFileWQ(int);
 
     template<WQCallbackType T>
-    void schedule(T &&, int, uint32_t)
+    void waitFile(T &&cb, int fd, uint32_t events)
     {
         auto fileWQ = fileWQPtrs_.find(fd);
 
@@ -70,19 +52,20 @@ public:
     }
 
     template<WQCallbackType T>
-    void schedule(T &&, const TimeWQ::TimePoint &)
+    void waitTime(T &&cb, const TimeWQ::TimePoint &tp)
     {
-        if (!timerWQPtr)
+        if (!timerWQPtr_)
         {
-            timerWQPtr.reset(new TimeWQ());
+            timerWQPtr_.reset(new TimeWQ());
         }
-        timerWQPtr->addWait(std::forward(cb), tp);
+        timerWQPtr_->addWait(std::forward(cb), tp);
     }
 
+    void schedule(WQCallback &&);
+
+    int createSock();
+    void closeSock(int);
 private:
-    std::atomic<bool> looping_;
-    std::atomic<bool> quit_;
-    
     std::unique_ptr<EPoller> poller_;
     std::unique_ptr<TimeWQ> timerWQPtr_;
     FileWQMap fileWQPtrs_;
