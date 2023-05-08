@@ -1,5 +1,8 @@
 #include "Core.h"
+#include "CoKernel.h"
+#include "../utils/ScopeExit.h"
 #include <assert.h>
+#include <sys/eventfd.h>
 #include <functional>
 #include <unistd.h>
 #include <signal.h>
@@ -7,61 +10,85 @@
 
 const int kPollTimeMs = 10000;
 
-Core::Core()
-    :poller_(new EPoller())
+std::atomic<int> core_i = 0;
+
+Core::Core(CoKernel *kernel)
+    :poller_(new EPoller()),
+    index(core_i++),
+    kernel_(kernel),
+    looping_(false),
+    quit_(false),
+    threadId_(std::this_thread::get_id())
 {
-    
+    int wakeupFd = ::eventfd(0, EFD_NONBLOCK | EFD_CLOEXEC);
+    if (wakeupFd < 0)
+    {
+    }
+    wakeUpWQ_.reset(new FileWQ(wakeupFd, this));
+    wakeUpWQ_->setFDCallback([](int fd) {
+        uint64_t tmp;
+        read(fd, &tmp, sizeof(tmp));});
+    poller_->updateWQ(EPOLL_CTL_ADD, wakeUpWQ_.get());
 }
 
 
 Core::~Core()
 {
+    quit();
+
+    while (looping_.load(std::memory_order_acquire))
+    {
+        std::this_thread::sleep_for(std::chrono::milliseconds(5));
+    }
+    close(wakeupFd_);
 }
 
 
-void Core::run()
+void Core::loop()
 {
-    while (true)
+    assert(!looping_);
+    assertInLoopThread();
+    looping_.store(true, std::memory_order_release);
+    quit_.store(false, std::memory_order_release);
+
+    auto loopFlagCleaner = makeScopeExit(
+        [this]() { looping_.store(false, std::memory_order_release); });
+    while (!quit_.load(std::memory_order_acquire))
     {
-        while (!readyWQ_.empty())
+        while (!funcs_.empty())
         {
-            auto func = readyWQ_.front();
-            func();
-            readyWQ_.pop();
+            WQCallback func;
+            while (funcs_.dequeue(func))
+            {
+                func();
+            }
         }
-        
+        kernel_->wakeUpReady();
         poller_->wait(kPollTimeMs);
     }
 }
 
-void Core::updateFileWQ(int fd, uint32_t events)
+void Core::quit()
 {
-    auto file = fileWQPtrs_.find(fd);
-    if (file == fileWQPtrs_.end())
+    quit_.store(true, std::memory_order_release);
+
+    if (!isInLoopThread())
     {
-        auto [it, flag] = fileWQPtrs_.insert(FileWQMap::value_type(fd, std::make_shared<FileWQ>(fd)));
-        it->second->setWEvents(events);
-        poller_->updateWQ(EPOLL_CTL_ADD, it->second.get());
-    }
-    else
-    {
-        file->second->setWEvents(events);
-        poller_->updateWQ(EPOLL_CTL_MOD, file->second.get());
+        wakeUp();
     }
 }
 
-void Core::removeFileWQ(int fd)
+/* 跨线程 eventfd read/write 线程安全*/
+void Core::wakeUp()
 {
-    auto file = fileWQPtrs_.find(fd);
-    if (file != fileWQPtrs_.end())
-    {
-        poller_->updateWQ(EPOLL_CTL_MOD, file->second.get());
-        fileWQPtrs_.erase(fd);
-    }
+    uint64_t tmp = 1;
+    write(wakeupFd_, &tmp, sizeof(tmp));
 }
 
-
-void Core::schedule(WQCallback &&cb)
+void Core::assertInLoopThread()
 {
-    readyWQ_.emplace(std::move(cb));
+    if (!isInLoopThread())
+    {
+        exit(1);
+    }
 }

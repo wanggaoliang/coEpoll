@@ -2,7 +2,7 @@
 #include <chrono>
 #include <sys/timerfd.h>
 #include <memory.h>
-#include <unistd.h>
+
 
 
 TimeWQ::TimeWQ(void *core):WQAbstract(-1, core)
@@ -15,11 +15,6 @@ TimeWQ::TimeWQ(int fd,void* core):WQAbstract(fd,core)
 
 TimeWQ::~TimeWQ()
 {
-    if (fd_ >= 0)
-    {
-        ::close(fd_);
-        fd_ = -1;
-    }
 }
 
 void TimeWQ::wakeup()

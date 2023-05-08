@@ -40,7 +40,9 @@ public:
 
     void schedule(WQCallback &&);
 
-    ThreadCorePtr getCore();
+    void wakeUpReady();
+
+    Core* getCore();
 
 
 private:
@@ -49,16 +51,21 @@ private:
     struct CoreCmp
     {
         bool
-            operator()(ThreadCorePtr __x, ThreadCorePtr __y) const
+            operator()(Core* __x, Core* __y) const
         {
-            return __x->listenNum > __y->listenNum;
+            return __x->getListenNum() > __y->getListenNum();
         }
     };
     
-    std::priority_queue < ThreadCorePtr, std::vector<ThreadCorePtr>, CoreCmp > thCores_;
+    /* 只有主线程使用 */
+    std::vector<ThreadCorePtr> thCores_;
+    std::shared_ptr<Core> core_;
+
+    /* 多线程使用，保证线程安全 */
+    std::priority_queue < Core *, std::vector<Core *>, CoreCmp > Cores_;
     std::unique_ptr<TimeWQ> timerWQPtr_;
     FileWQMap fileWQPtrs_;
     std::queue<WQCallback> readyWQ_;
     std::once_flag once_;
-    ThreadCorePtr core_;
+    
 };

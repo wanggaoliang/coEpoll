@@ -15,7 +15,7 @@ void EPoller::updateWQ(int op, WQAbstract *WQA)
 {
     epoll_event event;
     event.data.ptr = WQA;
-    event.events = WQA->getWEvents();
+    event.events = WQA->addWEvents(0);
     epoll_ctl(epoll_fd_, op, WQA->getFd(), &event);
 }
 
@@ -29,7 +29,7 @@ int EPoller::wait(int timeout)
     for (int i = 0;i < num_events;i++)
     {
         WQAbstract *WQA = static_cast<WQAbstract *>(events_[i].data.ptr);
-        WQA->setREvents(events_[i].events);
+        WQA->addREvents(events_[i].events);
         WQA->wakeup();
     }
     return num_events;

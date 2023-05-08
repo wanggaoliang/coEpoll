@@ -1,73 +1,84 @@
 #pragma once
 #include "NonCopyable.h"
 #include "EPoller.h"
-#include "TimeWQ.h"
 #include "FileWQ.h"
+#include "../utils/LockFreeQueue.h"
 #include <memory>
 #include <vector>
 #include <queue>
 #include <map>
+#include <thread>
 #include <chrono>
-#include <limits>
-
-enum
-{
-    InvalidTimerId = 0
-};
-
-/**
- * @brief As the name implies, this class represents an event loop that runs in
- * a perticular thread. The event loop can handle network I/O events and timers
- * in asynchronous mode.
- * @note An event loop object always belongs to a separate thread, and there is
- * one event loop object at most in a thread. We can call an event loop object
- * the event loop of the thread it belongs to, or call that thread the thread of
- * the event loop.
- */
-class Core : NonCopyable
+#include <atomic>
+class CoKernel;
+class Core: NonCopyable
 {
 public:
-    using FileWQMap = std::map<int, std::shared_ptr<FileWQ>>;
-    
-    Core();
+
+    Core(CoKernel *);
     ~Core();
 
-    void run();
+    void loop();
+
+    void quit();
+
+    bool isInLoopThread() const
+    {
+        return threadId_ == std::this_thread::get_id();
+    };
+
+    void assertInLoopThread();
+
+    template <WQCallbackType T>
+    void queueInLoop(T &&cb)
+    {
+        funcs_.enqueue(std::forward(cb));
+        if (!isInLoopThread() || !looping_.load(std::memory_order_acquire))
+        {
+            wakeup();
+        }
+    }
+
+    template <WQCallbackType T>
+    void runInLoop(T &&cb)
+    {
+        if (isInLoopThread())
+        {
+            cb();
+        }
+        else
+        {
+            queueInLoop(std::forward(cb));
+        }
+    }
+
+    int getListenNum()const
+    {
+        return listenNum_;
+    }
     
-    void updateFileWQ(int, uint32_t);
-
-    void removeFileWQ(int);
-
-    template<WQCallbackType T>
-    void waitFile(T &&cb, int fd, uint32_t events)
+    void addListen(WQAbstract *WQA)
     {
-        auto fileWQ = fileWQPtrs_.find(fd);
-
-        if (fileWQ == fileWQs_.end())
-        {
-            return;
-        }
-
-        fileWQ->second->addWait(std::forward(cb), events);
     }
+    void modListen(WQAbstract *);
+    
+    void removeListen(WQAbstract *);
 
-    template<WQCallbackType T>
-    void waitTime(T &&cb, const TimeWQ::TimePoint &tp)
-    {
-        if (!timerWQPtr_)
-        {
-            timerWQPtr_.reset(new TimeWQ());
-        }
-        timerWQPtr_->addWait(std::forward(cb), tp);
-    }
-
-    void schedule(WQCallback &&);
-
-    int createSock();
-    void closeSock(int);
 private:
+    void wakeUp();
+
+    std::atomic<bool> looping_;
+    std::atomic<bool> quit_;
+    int wakeupFd_;
     std::unique_ptr<EPoller> poller_;
-    std::unique_ptr<TimeWQ> timerWQPtr_;
-    FileWQMap fileWQPtrs_;
-    std::queue<WQCallback> readyWQ_;
+    MpscQueue<WQCallback> funcs_;
+    CoKernel *kernel_;
+    std::thread::id threadId_;
+    std::unique_ptr<FileWQ> wakeUpWQ_;
+
+    int listenNum_;
+    const int index;
+
+    static std::atomic<int> core_i;
+
 };

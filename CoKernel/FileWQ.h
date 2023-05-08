@@ -27,20 +27,25 @@ public:
     ~FileWQ() = default;
     void wakeup() override
     {
+        if (fdCallbck_)
+        {
+            fdCallbck_(fd_);
+        }
+        
         for (auto iter = items.begin(); iter != items.end(); )
         {
-            if (!revents_)
+            auto tevent = removeREvents(~iter->events_);
+            if (!tevent)
             {
                 break;
             }
-            else if (iter->events_ & revents_)
+            else if (iter->events_ & tevent)
             {
-                if (wakeCallback)
+                if (wakeCallback_)
                 {
-                    wakeCallback(std::move(iter->func_));
+                    wakeCallback_(std::move(iter->func_));
                 }
                 iter = items.erase(iter);
-                revents_ &= ~(iter->events_ & revents_);
             }
             else
             {
@@ -58,9 +63,17 @@ public:
     template<WakeCallbackType T>
     void setWakeCallback(T &&func)
     {
-        wakeCallback = std::forward(func);
+        wakeCallback_ = std::forward(func);
+    }
+
+    template<FDCallbackType T>
+    void setFDCallback(T &&func)
+    {
+        fdCallback_ = std::forward(func);
     }
 private:
     std::list<waitItem> items;
-    WakeCallback wakeCallback;
+    WakeCallback wakeCallback_;
+    FDCallback fdCallbck_;
 };
+
