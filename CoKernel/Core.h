@@ -1,6 +1,6 @@
 #pragma once
 #include "NonCopyable.h"
-#include "EPoller.h"
+#include "FDICU.h"
 #include "FileWQ.h"
 #include "../utils/LockFreeQueue.h"
 #include <memory>
@@ -51,18 +51,12 @@ public:
             queueInLoop(std::forward(cb));
         }
     }
-
-    int getListenNum()const
-    {
-        return listenNum_;
-    }
     
-    void addListen(WQAbstract *WQA)
-    {
-    }
-    void modListen(WQAbstract *);
+    void addIRQ(WQAbstract *WQA);
     
-    void removeListen(WQAbstract *);
+    void modIRQ(WQAbstract *);
+    
+    void removeIRQ(WQAbstract *);
 
 private:
     void wakeUp();
@@ -70,13 +64,13 @@ private:
     std::atomic<bool> looping_;
     std::atomic<bool> quit_;
     int wakeupFd_;
-    std::unique_ptr<EPoller> poller_;
+    std::unique_ptr<FDICU> fdICU_;
     MpscQueue<WQCallback> funcs_;
     CoKernel *kernel_;
     std::thread::id threadId_;
     std::unique_ptr<FileWQ> wakeUpWQ_;
 
-    int listenNum_;
+    std::atomic<int> irqNum_;
     const int index;
 
     static std::atomic<int> core_i;

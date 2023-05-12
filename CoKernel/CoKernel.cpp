@@ -2,21 +2,27 @@
 
 void CoKernel::updateFileWQ(int fd, uint32_t events)
 {
+    fqlk.lock();
     auto file = fileWQPtrs_.find(fd);
-    if (file == fileWQPtrs_.end())
+    auto found = file != fileWQPtrs_.end();
+    /* fd 的创建是线程安全的因此在没有执行remove前不可能add两个相同的fd，remove前必定已add,因此两个add无竞争条件*/
+    if (!found)
     {
-        auto [it, flag] = fileWQPtrs_.insert(FileWQMap::value_type(fd, std::make_shared<FileWQ>(fd)));
-        it->second->setWEvents(events);
-        auto core = thCores_.top();
-        //core.addlisten(it->second.get())
-        thCores_.pop();
-        thCores_.emplace(core);
+        fqlk.unlock();
+        auto fq = std::make_shared<FileWQ>(fd);
+        fq->setWEvents(events);
+        auto core = getNextCore();
+        core->addIRQ(fq.get());
+        fqlk.lock();
+        fileWQPtrs_.insert(FileWQMap::value_type(fd, std::make_shared<FileWQ>(fd)));
+        fqlk.unlock();
     }
     else
     {
         file->second->setWEvents(events);
         auto core = static_cast<Core *>(file->second->getArg());
-        //core.modlisten(file->second.get());
+        fqlk.unlock();
+        core->modIRQ(file->second.get());
     }
 }
 
@@ -26,8 +32,7 @@ void CoKernel::removeFileWQ(int fd)
     if (file != fileWQPtrs_.end())
     {
         auto core = static_cast<Core *>(file->second->getArg());
-        //core.removelisten(it->second.get())
-        fileWQPtrs_.erase(fd);
+        core->removeIRQ(file->second.get());
     }
 }
 
@@ -44,10 +49,16 @@ void CoKernel::wakeUpReady()
     }
 }
 
-Core* CoKernel::getCore()
+Core* CoKernel::getBPCore()
 {
     std::call_once(once_, [this]() {
         this->core_ = std::make_shared<Core>(this);
                    });
     return core_.get();
+}
+
+Core *CoKernel::getNextCore()
+{
+    auto index = nextCore_.fetch_add(1, std::memory_order_acq_rel);
+    return cores_[index];
 }

@@ -1,7 +1,5 @@
 #pragma once
-#include <type_traits>
-#include <functional>
-#include <vector>
+#include "Common.h"
 #include <atomic>
 #include <unistd.h>
 class WQAbstract
@@ -17,11 +15,17 @@ public:
         }
     }
     virtual void wakeup() = 0;
+
+    uint setREvents(uint revents)
+    {
+        return revents_.exchange(revents, std::memory_order_acq_rel);
+    }
     
     uint addREvents(uint revents)
     {
         return revents_.fetch_or(revents, std::memory_order_acq_rel);
     }
+    
     uint removeREvents(uint revents)
     {
         return revents_.fetch_and(~revents, std::memory_order_acq_rel);
@@ -30,6 +34,11 @@ public:
     uint32_t addWEvents(uint wevents)
     {
         return wevents_.fetch_or(wevents, std::memory_order_acq_rel);
+    }
+
+    uint32_t setWEvents(uint wevents)
+    {
+        return wevents_.exchange(wevents, std::memory_order_acq_rel);
     }
 
     uint32_t removeWEvents(uint wevents)
@@ -55,17 +64,5 @@ protected:
     int fd_;
 };
 
-using WQCallback = std::function<void()>;
-using WakeCallback = std::function<void(WQCallback &&)>;
-using FDCallback = std::function<void(int)>;
 using WQList = std::vector<WQAbstract>;
 using WQPtrList = std::vector<WQAbstract *>;
-
-template<typename T>
-concept WQCallbackType = std::is_same_v<T, WQCallback>;
-
-template<typename T>
-concept WakeCallbackType = std::is_same_v<T, WakeCallback>;
-
-template<typename T>
-concept FDCallbackType = std::is_same_v<T, FDCallback>;

@@ -13,7 +13,7 @@ const int kPollTimeMs = 10000;
 std::atomic<int> core_i = 0;
 
 Core::Core(CoKernel *kernel)
-    :poller_(new EPoller()),
+    :fdICU_(new FDICU()),
     index(core_i++),
     kernel_(kernel),
     looping_(false),
@@ -28,7 +28,7 @@ Core::Core(CoKernel *kernel)
     wakeUpWQ_->setFDCallback([](int fd) {
         uint64_t tmp;
         read(fd, &tmp, sizeof(tmp));});
-    poller_->updateWQ(EPOLL_CTL_ADD, wakeUpWQ_.get());
+    fdICU_->updateIRQ(EPOLL_CTL_ADD, wakeUpWQ_.get());
 }
 
 
@@ -64,7 +64,7 @@ void Core::loop()
             }
         }
         kernel_->wakeUpReady();
-        poller_->wait(kPollTimeMs);
+        fdICU_->waitIRQ(kPollTimeMs);
     }
 }
 
@@ -82,7 +82,7 @@ void Core::quit()
 void Core::wakeUp()
 {
     uint64_t tmp = 1;
-    write(wakeupFd_, &tmp, sizeof(tmp));
+    write(wakeUpWQ_->getFd(), &tmp, sizeof(tmp));
 }
 
 void Core::assertInLoopThread()

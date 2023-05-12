@@ -1,17 +1,17 @@
-#include "EPoller.h"
+#include "FDICU.h"
 #include <unistd.h>
 
-EPoller::EPoller()
+FDICU::FDICU()
 {
     epoll_fd_ = epoll_create1(0);
 }
 
-EPoller::~EPoller()
+FDICU::~FDICU()
 {
     ::close(epoll_fd_);
 }
 
-void EPoller::updateWQ(int op, WQAbstract *WQA)
+void FDICU::updateIRQ(int op, WQAbstract *WQA)
 {
     epoll_event event;
     event.data.ptr = WQA;
@@ -19,7 +19,7 @@ void EPoller::updateWQ(int op, WQAbstract *WQA)
     epoll_ctl(epoll_fd_, op, WQA->getFd(), &event);
 }
 
-int EPoller::wait(int timeout)
+int FDICU::waitIRQ(int timeout)
 {
     int num_events = epoll_wait(epoll_fd_, events_, 128, timeout);
     if (num_events < 0)

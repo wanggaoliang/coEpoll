@@ -2,14 +2,14 @@
 #include <sys/epoll.h>
 #include "WQAbstract.h"
 
-class EPoller
+class FDICU
 {
 public:
-    EPoller();
-    ~EPoller();
+    FDICU();
+    ~FDICU();
 
-    void updateWQ(int, WQAbstract*);
-    int wait(int timeout);
+    void updateIRQ(int, WQAbstract*);
+    int waitIRQ(int);
 
 private:
     int epoll_fd_;

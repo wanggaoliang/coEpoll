@@ -2,6 +2,7 @@
 #include "TimeWQ.h"
 #include "FileWQ.h"
 #include "ThreadCore.h"
+#include "../utils/SpinLock.h"
 #include <mutex>
 #include <memory>
 #include <map>
@@ -34,6 +35,14 @@ public:
         timerWQPtr_->addWait(std::forward(cb), tp);
     }
 
+    void waitLock();
+
+    void unlock();
+
+    int createMutex();
+
+    int delMutext();
+
     void updateFileWQ(int, uint32_t);
 
     void removeFileWQ(int);
@@ -42,29 +51,26 @@ public:
 
     void wakeUpReady();
 
-    Core* getCore();
+    Core *getBPCore();
 
 
 private:
    
-
-    struct CoreCmp
-    {
-        bool
-            operator()(Core* __x, Core* __y) const
-        {
-            return __x->getListenNum() > __y->getListenNum();
-        }
-    };
+    Core *getNextCore();
     
     /* 只有主线程使用 */
     std::vector<ThreadCorePtr> thCores_;
     std::shared_ptr<Core> core_;
 
     /* 多线程使用，保证线程安全 */
-    std::priority_queue < Core *, std::vector<Core *>, CoreCmp > Cores_;
+    std::atomic<uint> nextCore_;
+    std::vector<Core *> cores_;
+    const uint coreNum_;
     std::unique_ptr<TimeWQ> timerWQPtr_;
+    
     FileWQMap fileWQPtrs_;
+    SpinLock fqlk;
+
     std::queue<WQCallback> readyWQ_;
     std::once_flag once_;
     
