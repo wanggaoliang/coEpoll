@@ -57,19 +57,19 @@ public:
     template<WQCallbackType T>
     void addWait(T &&func, uint32_t events)
     {
-        items.emplace_back(std::forward(func), events);
+        items.emplace_back(std::forward<T>(func), events);
     }
 
     template<WakeCallbackType T>
     void setWakeCallback(T &&func)
     {
-        wakeCallback_ = std::forward(func);
+        wakeCallback_ = std::forward<T>(func);
     }
 
     template<FDCallbackType T>
     void setFDCallback(T &&func)
     {
-        fdCallback_ = std::forward(func);
+        fdCallback_ = std::forward<T>(func);
     }
 private:
     std::list<waitItem> items;

@@ -32,7 +32,7 @@ public:
     template <WQCallbackType T>
     void queueInLoop(T &&cb)
     {
-        funcs_.enqueue(std::forward(cb));
+        funcs_.enqueue(std::forward<T>(cb));
         if (!isInLoopThread() || !looping_.load(std::memory_order_acquire))
         {
             wakeup();
@@ -48,7 +48,7 @@ public:
         }
         else
         {
-            queueInLoop(std::forward(cb));
+            queueInLoop(std::forward<T>(cb));
         }
     }
     

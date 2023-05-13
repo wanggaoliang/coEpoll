@@ -47,14 +47,14 @@ public:
     template<WQCallbackType T>
     void addWait(T &&cb, const TimePoint &when)
     {
-        items_.emplace(std::forward(cb), when);
+        items_.emplace(std::forward<T>(cb), when);
         resetTimerfd(items_.top().when_);
     }
 
     template<WakeCallbackType T>
     void setWakeCallback(T &&func)
     {
-        wakeCallback = std::forward(func);
+        wakeCallback = std::forward<T>(func);
     }
 private:
     int readTimerfd();

@@ -1,7 +1,10 @@
 #include "CoKernel.h"
 
-void CoKernel::updateFileWQ(int fd, uint32_t events)
+CoKernel::ReqIRQRet CoKernel::updateFileWQ(int fd, uint32_t events)
 {
+    return ReqIRQRet{core_.get(),[]() -> int {
+
+    }};
     fqlk.lock();
     auto file = fileWQPtrs_.find(fd);
     auto found = file != fileWQPtrs_.end();

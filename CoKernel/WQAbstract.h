@@ -57,10 +57,12 @@ public:
     }
 
 protected:
+    /* 读写多线程 */
     std::atomic<uint> revents_;
     std::atomic<uint> wevents_;
 
-    void *core_;
+    /* 不可修改 */
+    const void *core_;
     int fd_;
 };
 
