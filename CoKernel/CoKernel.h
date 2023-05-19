@@ -103,40 +103,40 @@ public:
     using FileWQMap = std::map<int, std::shared_ptr<FileWQ>>;
     using ThreadCorePtr = std::shared_ptr<ThreadCore>;
     using ReqIRQRet = RunInCore<int>;
+    
+    ~CoKernel() = default;
+    
     template <WQCallbackType T>
-    void waitFile(T &&cb, int fd, uint32_t events)
+    RunInCore<void> waitFile(T &&cb, int fd, uint32_t events)
     {
+        return 
         auto fileWQ = fileWQPtrs_.find(fd);
 
-        if (fileWQ == fileWQs_.end())
+        if (fileWQ == fileWQPtrs_.end())
         {
             return;
         }
 
-        fileWQ->second->addWait(std::forward(cb), events);
+        fileWQ->second->addWait(std::forward<T>(cb), events);
     }
 
     template <WQCallbackType T>
-    void waitTime(T &&cb, const TimeWQ::TimePoint &tp)
+    RunInCore<void> waitTime(T &&cb, const TimeWQ::TimePoint &tp)
     {
         if (!timerWQPtr_)
         {
             timerWQPtr_.reset(new TimeWQ());
         }
-        timerWQPtr_->addWait(std::forward(cb), tp);
+        timerWQPtr_->addWait(std::forward<T>(cb), tp);
     }
-
-    void waitLock();
-
-    void unlock();
 
     int createMutex();
 
     int delMutext();
 
-    ReqIRQRet updateFileWQ(int, uint32_t);
+    ReqIRQRet updateIRQ(int, uint32_t);
 
-    void removeFileWQ(int);
+    ReqIRQRet removeIRQ(int);
 
     void schedule(WQCallback &&);
 
@@ -145,8 +145,13 @@ public:
     Core *getBPCore();
 
 private:
-
+    CoKernel(uint num) :coreNum_(num) {}
+    
     Core *getNextCore();
+
+    int updateFileWQ(int, uint32_t);
+
+    int removeFileWQ(int);
 
     /* 只有主线程使用 */
     std::vector<ThreadCorePtr> thCores_;

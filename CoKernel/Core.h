@@ -52,19 +52,30 @@ public:
         }
     }
     
-    void addIRQ(WQAbstract *WQA);
+    int addIRQ(WQAbstract *WQA)
+    {
+        return fdICU_->updateIRQ(EPOLL_CTL_ADD, WQA);
+    }
     
-    void modIRQ(WQAbstract *);
+    int modIRQ(WQAbstract *WQA)
+    {
+        return fdICU_->updateIRQ(EPOLL_CTL_MOD, WQA);
+    }
     
-    void removeIRQ(WQAbstract *);
+    int removeIRQ(WQAbstract *WQA)
+    {
+        return fdICU_->updateIRQ(EPOLL_CTL_DEL, WQA);
+    }
 
 private:
     void wakeUp();
 
+    std::unique_ptr<FDICU> fdICU_;
+    
     std::atomic<bool> looping_;
     std::atomic<bool> quit_;
     int wakeupFd_;
-    std::unique_ptr<FDICU> fdICU_;
+    
     MpscQueue<WQCallback> funcs_;
     CoKernel *kernel_;
     std::thread::id threadId_;

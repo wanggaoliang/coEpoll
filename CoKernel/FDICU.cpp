@@ -11,12 +11,17 @@ FDICU::~FDICU()
     ::close(epoll_fd_);
 }
 
-void FDICU::updateIRQ(int op, WQAbstract *WQA)
+int FDICU::updateIRQ(int op, WQAbstract *WQA)
 {
     epoll_event event;
     event.data.ptr = WQA;
     event.events = WQA->addWEvents(0);
-    epoll_ctl(epoll_fd_, op, WQA->getFd(), &event);
+    auto ret = ::epoll_ctl(epoll_fd_, op, WQA->getFd(), &event);
+    if (ret < 0)
+    {
+        ret = -errno;
+    }
+    return ret;
 }
 
 int FDICU::waitIRQ(int timeout)

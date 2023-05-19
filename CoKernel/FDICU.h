@@ -8,7 +8,7 @@ public:
     FDICU();
     ~FDICU();
 
-    void updateIRQ(int, WQAbstract*);
+    int updateIRQ(int, WQAbstract*);
     int waitIRQ(int);
 
 private:
