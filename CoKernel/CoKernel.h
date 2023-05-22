@@ -3,10 +3,10 @@
 #include "FileWQ.h"
 #include "ThreadCore.h"
 #include "../utils/SpinLock.h"
+#include "../CoRo/Lazy.h"
 #include <mutex>
 #include <memory>
 #include <map>
-#include <coroutine>
 #include <type_traits>
 #include <concepts>
 
@@ -103,8 +103,9 @@ public:
     using FileWQMap = std::map<int, std::shared_ptr<FileWQ>>;
     using ThreadCorePtr = std::shared_ptr<ThreadCore>;
     using ReqIRQRet = RunInCore<int>;
+
     
-    ~CoKernel() = default;
+
     
     template <WQCallbackType T>
     RunInCore<void> waitFile(T &&cb, int fd, uint32_t events)
@@ -134,18 +135,29 @@ public:
 
     int delMutext();
 
-    ReqIRQRet updateIRQ(int, uint32_t);
+    Lazy<int> updateIRQ(int, uint32_t);
 
-    ReqIRQRet removeIRQ(int);
+    Lazy<int> removeIRQ(int);
 
     void schedule(WQCallback &&);
 
     void wakeUpReady();
 
-    Core *getBPCore();
+    void start();
 
+    static void INIT(uint num)
+    {
+        kernel = std::make_shared<CoKernel>(num);
+    }
+
+    static std::shared_ptr<CoKernel> getKernel()
+    {
+        return kernel;
+    }
+
+    ~CoKernel() = default;
 private:
-    CoKernel(uint num) :coreNum_(num) {}
+    CoKernel(uint);
     
     Core *getNextCore();
 
@@ -168,4 +180,6 @@ private:
 
     std::queue<WQCallback> readyWQ_;
     std::once_flag once_;
+
+    static std::shared_ptr<CoKernel> kernel;
 };

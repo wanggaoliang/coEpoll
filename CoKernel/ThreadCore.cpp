@@ -1,7 +1,6 @@
 #include "ThreadCore.h"
-ThreadCore::ThreadCore(CoKernel *ker)
-    :kernel_(ker),
-    thread_([this]() { loopFuncs(); })
+ThreadCore::ThreadCore()
+    :thread_([this]() { loopFuncs(); })
 {
     auto f = promiseForCorePtr_.get_future();
     core_ = f.get();
@@ -34,7 +33,7 @@ void ThreadCore::loopFuncs()
 {
 
     thread_local static std::shared_ptr<Core> core =
-        std::make_shared<Core>(kernel_);
+        std::make_shared<Core>();
     core->queueInLoop([this]() { promiseForLoop_.set_value(1); });
     promiseForCorePtr_.set_value(core);
     auto f = promiseForRun_.get_future();

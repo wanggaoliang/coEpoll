@@ -7,7 +7,7 @@
 class ThreadCore
 {
 public:
-    ThreadCore(CoKernel*);
+    ThreadCore();
     
     ~ThreadCore();
     
@@ -23,7 +23,6 @@ public:
     
 private:
     void loopFuncs();
-    CoKernel *kernel_;
     std::shared_ptr<Core> core_;
     
     std::once_flag once_;

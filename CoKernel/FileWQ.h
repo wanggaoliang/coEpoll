@@ -19,40 +19,10 @@ public:
         {}
     };
 
-    FileWQ(int fd, void* core):WQAbstract(fd,core)
-    {
+    FileWQ(int fd, void *core);
 
-    }
-
-    ~FileWQ() = default;
-    void wakeup() override
-    {
-        if (fdCallbck_)
-        {
-            fdCallbck_(fd_);
-        }
-        
-        for (auto iter = items.begin(); iter != items.end(); )
-        {
-            auto tevent = removeREvents(~iter->events_);
-            if (!tevent)
-            {
-                break;
-            }
-            else if (iter->events_ & tevent)
-            {
-                if (wakeCallback_)
-                {
-                    wakeCallback_(std::move(iter->func_));
-                }
-                iter = items.erase(iter);
-            }
-            else
-            {
-                iter++;
-            }
-        }
-    }
+    ~FileWQ();
+    void wakeup() override;
 
     template<WQCallbackType T>
     void addWait(T &&func, uint32_t events)

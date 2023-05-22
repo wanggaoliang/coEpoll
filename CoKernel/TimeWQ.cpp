@@ -15,6 +15,16 @@ TimeWQ::TimeWQ(int fd,void* core):WQAbstract(fd,core)
 
 TimeWQ::~TimeWQ()
 {
+    readTimerfd();
+    while (!items_.empty())
+    {
+        if (wakeCallback)
+        {
+            auto it = items_.top();
+            wakeCallback(std::move(it.func_));
+        }
+        items_.pop();
+    }
 }
 
 void TimeWQ::wakeup()
@@ -27,7 +37,8 @@ void TimeWQ::wakeup()
         {
             if (wakeCallback)
             {
-                wakeCallback(std::move(items_.top().func_));
+                auto it = items_.top();
+                wakeCallback(std::move(it.func_));
             }
             items_.pop();
         }

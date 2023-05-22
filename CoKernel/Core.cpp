@@ -1,21 +1,14 @@
 #include "Core.h"
-#include "CoKernel.h"
 #include "../utils/ScopeExit.h"
 #include <assert.h>
 #include <sys/eventfd.h>
-#include <functional>
-#include <unistd.h>
 #include <signal.h>
 #include <fcntl.h>
 
 const int kPollTimeMs = 10000;
 
-std::atomic<int> core_i = 0;
-
-Core::Core(CoKernel *kernel)
+Core::Core()
     :fdICU_(new FDICU()),
-    index(core_i++),
-    kernel_(kernel),
     looping_(false),
     quit_(false),
     threadId_(std::this_thread::get_id())
@@ -25,9 +18,9 @@ Core::Core(CoKernel *kernel)
     {
     }
     wakeUpWQ_.reset(new FileWQ(wakeupFd, this));
-    wakeUpWQ_->setFDCallback([](int fd) {
+    wakeUpWQ_->setFDCallback(std::function([](int fd) {
         uint64_t tmp;
-        read(fd, &tmp, sizeof(tmp));});
+        read(fd, &tmp, sizeof(tmp));}));
     fdICU_->updateIRQ(EPOLL_CTL_ADD, wakeUpWQ_.get());
 }
 
@@ -63,7 +56,11 @@ void Core::loop()
                 func();
             }
         }
-        kernel_->wakeUpReady();
+
+        if (pickUpCbk_)
+        {
+            pickUpCbk_();
+        }
         fdICU_->waitIRQ(kPollTimeMs);
     }
 }

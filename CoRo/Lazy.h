@@ -5,245 +5,235 @@
 #include <cstdio>
 #include <exception>
 #include <variant>
+#include <coroutine>
 #include "../utils/NonCopyable.h"
-#include "async_simple/Common.h"
-#include "async_simple/Try.h"
-#include "async_simple/coro/ViaCoroutine.h"
-#include "async_simple/coro/DetachedCoroutine.h"
-#include "async_simple/experimental/coroutine.h"
-#include <iostream>
+template <typename T>
+class Lazy;
 
-namespace detail
+template <class T>
+concept HasCoAwaitMethod = requires(T &&awaitable) {
+    std::forward<T>(awaitable).coAwait();
+};
+
+class LazyPromiseBase
 {
-    template <typename T>
-    class Lazy;
-
-    template <class T>
-    concept HasCoAwaitMethod = requires(T &&awaitable) {
-        std::forward<T>(awaitable).coAwait();
-    };
-
-    class LazyPromiseBase
+public:
+    struct FinalAwaiter
     {
-    public:
-        struct FinalAwaiter
-        {
-            bool await_ready() const noexcept { return false; }
-
-            template <typename PromiseType>
-            auto await_suspend(std::coroutine_handle<PromiseType> h) noexcept
-            {
-                return h.promise()._continuation;
-            }
-
-            void await_resume() noexcept {}
-        };
-
-    public:
-        LazyPromiseBase() : _index(cnt++) {}
-
-        std::suspend_always initial_suspend() noexcept { return {}; }
-
-        FinalAwaiter final_suspend() noexcept { return {}; }
-
-        template <typename Awaitable>
-            requires HasCoAwaitMethod<Awaitable>
-        auto await_transform(Awaitable &&awaitable)
-        {
-                return std::forward<Awaitable>(awaitable).coAwait();
-        }
-
-        std::coroutine_handle<> _continuation;
-        uint _index;
-        static uint cnt;
-    };
-
-    uint LazyPromiseBase::cnt = 0;
-
-
-    template <typename T>
-    class LazyPromise : public LazyPromiseBase
-    {
-    public:
-        LazyPromise() noexcept {}
-        ~LazyPromise() noexcept {}
-
-        Lazy<T> get_return_object() noexcept;
-
-        template <typename V>
-        void return_value(V &&value) noexcept(std::is_nothrow_constructible_v<T, V &&>)
-            requires std::is_convertible_v<V &&, T>
-        {
-            _value.template emplace<T>(std::forward<V>(value));
-        }
-
-        void unhandled_exception() noexcept
-        {
-            _value.template emplace<std::exception_ptr>(std::current_exception());
-        }
-
-    public:
-        T &result() &
-        {
-            if (std::holds_alternative<std::exception_ptr>(_value))
-                AS_UNLIKELY{
-                    std::rethrow_exception(std::get<std::exception_ptr>(_value));
-            }
-            assert(std::holds_alternative<T>(_value));
-            return std::get<T>(_value);
-        }
-        T &&result() &&
-        {
-            if (std::holds_alternative<std::exception_ptr>(_value))
-                AS_UNLIKELY{
-                    std::rethrow_exception(std::get<std::exception_ptr>(_value));
-            }
-            assert(std::holds_alternative<T>(_value));
-            return std::move(std::get<T>(_value));
-        }
-
-        std::variant<std::monostate, T, std::exception_ptr> _value;
-    };
-
-    template <>
-    class LazyPromise<void> : public LazyPromiseBase
-    {
-    public:
-        Lazy<void> get_return_object() noexcept;
-        void return_void() noexcept {}
-        void unhandled_exception() noexcept
-        {
-            _exception = std::current_exception();
-        }
-
-        void result()
-        {
-            if (_exception != nullptr)
-                AS_UNLIKELY{ std::rethrow_exception(_exception); }
-        }
-
-    public:
-        std::exception_ptr _exception{ nullptr };
-    };
-
-    template <typename T>
-    struct ValueAwaiter : NonCopyable
-    {
-        using Handle = CoroHandle<detail::LazyPromise<T>>;
-        Handle _handle;
-
-        ValueAwaiter(Handle coro) : _hadnle(coro) {}
-
-        ValueAwaiter(ValueAwaiter &&other)
-            : _handle(std::exchange(other._handle, nullptr))
-        {}
-
-        ~ValueAwaiter()
-        {
-            if (_handle)
-            {
-                _handle.destroy();
-                _handle = nullptr;
-            }
-        }
-
-        ValueAwaiter &operator=(ValueAwaiter &&other)
-        {
-            std::swap(_handle, other._handle);
-            return *this;
-        }
-
         bool await_ready() const noexcept { return false; }
 
-        AS_INLINE auto await_suspend(
-            std::coroutine_handle<> continuation) noexcept
+        template <typename PromiseType>
+        auto await_suspend(std::coroutine_handle<PromiseType> h) noexcept
         {
-            // current coro started, caller becomes my continuation
-            this->_handle.promise()._continuation = continuation;
-            return this->_handle;
+            return h.promise()._continuation;
         }
 
-        AS_INLINE T await_resume()
-        {
-            if constexpr (std::is_void_v<T>)
-            {
-                _handle.promise().result();
-                // We need to destroy the handle expclictly since the awaited
-                // coroutine after symmetric transfer couldn't release it self any
-                // more.
-                _handle.destroy();
-                _handle = nullptr;
-            }
-            else
-            {
-                auto r = std::move(_handle.promise()).result();
-                _handle.destroy();
-                _handle = nullptr;
-                return r;
-            }
-        }
+        void await_resume() noexcept {}
     };
 
-    template <typename T>
-    class Lazy :NonCopyable
+public:
+    LazyPromiseBase() : _index(cnt++) {}
+
+    std::suspend_always initial_suspend() noexcept { return {}; }
+
+    FinalAwaiter final_suspend() noexcept { return {}; }
+
+    template <typename Awaitable>
+        requires HasCoAwaitMethod<Awaitable>
+    auto await_transform(Awaitable &&awaitable)
     {
-    public:
-        using promise_type = detail::LazyPromise<T>;
-        using Handle = CoroHandle<promise_type>;
-        using ValueType = T;
-        
+            return std::forward<Awaitable>(awaitable).coAwait();
+    }
 
-        explicit Lazy(Handle coro) : _coro(coro) {};
+    std::coroutine_handle<> _continuation;
+    uint _index;
+    static uint cnt;
+};
 
+uint LazyPromiseBase::cnt = 0;
 
-        Lazy(Lazy &&other) : _coro(std::move(other._coro))
-        {
-            other._coro = nullptr;
+template <typename T>
+class LazyPromise : public LazyPromiseBase
+{
+public:
+    LazyPromise() noexcept {}
+    ~LazyPromise() noexcept {}
+
+    Lazy<T> get_return_object() noexcept;
+
+    template <typename V>
+    void return_value(V &&value) noexcept(std::is_nothrow_constructible_v<T, V &&>)
+        requires std::is_convertible_v<V &&, T>
+    {
+        _value.template emplace<T>(std::forward<V>(value));
+    }
+
+    void unhandled_exception() noexcept
+    {
+        _value.template emplace<std::exception_ptr>(std::current_exception());
+    }
+
+public:
+    T &result() &
+    {
+        if (std::holds_alternative<std::exception_ptr>(_value))
+            AS_UNLIKELY{
+                std::rethrow_exception(std::get<std::exception_ptr>(_value));
         }
-
-        ~Lazy()
-        {
-            if (_coro)
-            {
-                _coro.destroy();
-                _coro = nullptr;
-            }
-        };
-
-        Lazy& operator =(Lazy &&other)
-        {
-            _coro = std::move(other._coro);
-            other._coro = nullptr;
+        assert(std::holds_alternative<T>(_value));
+        return std::get<T>(_value);
+    }
+    T &&result() &&
+    {
+        if (std::holds_alternative<std::exception_ptr>(_value))
+            AS_UNLIKELY{
+                std::rethrow_exception(std::get<std::exception_ptr>(_value));
         }
+        assert(std::holds_alternative<T>(_value));
+        return std::move(std::get<T>(_value));
+    }
 
-        bool isReady() const
-        {
-            return !_coro || _coro.done();
-        }
+    std::variant<std::monostate, T, std::exception_ptr> _value;
+};
 
-        auto operator co_await()
-        {
-            return ValueAwaiter(std::exchange(_coro, nullptr));
-        }
+template <>
+class LazyPromise<void> : public LazyPromiseBase
+{
+public:
+    Lazy<void> get_return_object() noexcept;
+    void return_void() noexcept {}
+    void unhandled_exception() noexcept
+    {
+        _exception = std::current_exception();
+    }
 
-        auto coAwait()
+    void result()
+    {
+        if (_exception != nullptr)
+            AS_UNLIKELY{ std::rethrow_exception(_exception); }
+    }
+
+public:
+    std::exception_ptr _exception{ nullptr };
+};
+
+template <typename T>
+struct ValueAwaiter : NonCopyable
+{
+    using Handle = CoroHandle<detail::LazyPromise<T>>;
+    Handle _handle;
+
+    ValueAwaiter(Handle coro) : _hadnle(coro) {}
+
+    ValueAwaiter(ValueAwaiter &&other)
+        : _handle(std::exchange(other._handle, nullptr))
+    {}
+
+    ~ValueAwaiter()
+    {
+        if (_handle)
         {
-            return ValueAwaiter(std::exchange(_coro, nullptr));
+            _handle.destroy();
+            _handle = nullptr;
         }
-    protected:
-        Handle _coro;
+    }
+
+    ValueAwaiter &operator=(ValueAwaiter &&other)
+    {
+        std::swap(_handle, other._handle);
+        return *this;
+    }
+
+    bool await_ready() const noexcept { return false; }
+
+    AS_INLINE auto await_suspend(
+        std::coroutine_handle<> continuation) noexcept
+    {
+        // current coro started, caller becomes my continuation
+        this->_handle.promise()._continuation = continuation;
+        return this->_handle;
+    }
+
+    AS_INLINE T await_resume()
+    {
+        if constexpr (std::is_void_v<T>)
+        {
+            _handle.promise().result();
+            // We need to destroy the handle expclictly since the awaited
+            // coroutine after symmetric transfer couldn't release it self any
+            // more.
+            _handle.destroy();
+            _handle = nullptr;
+        }
+        else
+        {
+            auto r = std::move(_handle.promise()).result();
+            _handle.destroy();
+            _handle = nullptr;
+            return r;
+        }
+    }
+};
+
+template <typename T>
+class Lazy :NonCopyable
+{
+public:
+    using promise_type = detail::LazyPromise<T>;
+    using Handle = CoroHandle<promise_type>;
+    using ValueType = T;
+    
+
+    explicit Lazy(Handle coro) : _coro(coro) {};
+
+
+    Lazy(Lazy &&other) : _coro(std::move(other._coro))
+    {
+        other._coro = nullptr;
+    }
+
+    ~Lazy()
+    {
+        if (_coro)
+        {
+            _coro.destroy();
+            _coro = nullptr;
+        }
     };
-}  // namespace detail
+
+    Lazy& operator =(Lazy &&other)
+    {
+        _coro = std::move(other._coro);
+        other._coro = nullptr;
+    }
+
+    bool isReady() const
+    {
+        return !_coro || _coro.done();
+    }
+
+    auto operator co_await()
+    {
+        return ValueAwaiter(std::exchange(_coro, nullptr));
+    }
+
+    auto coAwait()
+    {
+        return ValueAwaiter(std::exchange(_coro, nullptr));
+    }
+protected:
+    Handle _coro;
+};
 
 template <typename T>
 inline detail::Lazy<T> detail::LazyPromise<T>::get_return_object() noexcept
 {
-    return Lazy<T>(Lazy<T>::Handle::from_promise(*this));
+return Lazy<T>(Lazy<T>::Handle::from_promise(*this));
 }
 
 template <>
 inline detail::Lazy<void> detail::LazyPromise<void>::get_return_object() noexcept
 {
-    return Lazy<void>(Lazy<void>::Handle::from_promise(*this));
+return Lazy<void>(Lazy<void>::Handle::from_promise(*this));
 }
 

@@ -5,22 +5,20 @@
 #include "../utils/LockFreeQueue.h"
 #include <memory>
 #include <vector>
-#include <queue>
-#include <map>
 #include <thread>
-#include <chrono>
 #include <atomic>
-class CoKernel;
-class Core: NonCopyable
+class Core : NonCopyable
 {
 public:
 
-    Core(CoKernel *);
+    Core();
     ~Core();
 
     void loop();
 
     void quit();
+
+    void wakeUp();
 
     bool isInLoopThread() const
     {
@@ -29,7 +27,8 @@ public:
 
     void assertInLoopThread();
 
-    template <WQCallbackType T>
+    template <typename T>
+        requires std::is_convertible_v<T, WQCallback>
     void queueInLoop(T &&cb)
     {
         funcs_.enqueue(std::forward<T>(cb));
@@ -39,7 +38,8 @@ public:
         }
     }
 
-    template <WQCallbackType T>
+    template <typename T>
+        requires std::is_convertible_v<T, WQCallback>
     void runInLoop(T &&cb)
     {
         if (isInLoopThread())
@@ -51,39 +51,40 @@ public:
             queueInLoop(std::forward<T>(cb));
         }
     }
-    
+
+    template <typename T>
+        requires std::is_convertible_v<T, std::function<void()>>
+    void setPickUP(T &&cb)
+    {
+        pickUpCbk = std::forward<T>(cb);
+    }
+
     int addIRQ(WQAbstract *WQA)
     {
         return fdICU_->updateIRQ(EPOLL_CTL_ADD, WQA);
     }
-    
+
     int modIRQ(WQAbstract *WQA)
     {
         return fdICU_->updateIRQ(EPOLL_CTL_MOD, WQA);
     }
-    
+
     int removeIRQ(WQAbstract *WQA)
     {
         return fdICU_->updateIRQ(EPOLL_CTL_DEL, WQA);
     }
 
 private:
-    void wakeUp();
-
     std::unique_ptr<FDICU> fdICU_;
-    
+    std::function<void()> pickUpCbk_;
+    MpscQueue<WQCallback> funcs_;
+
     std::atomic<bool> looping_;
     std::atomic<bool> quit_;
+
     int wakeupFd_;
-    
-    MpscQueue<WQCallback> funcs_;
-    CoKernel *kernel_;
-    std::thread::id threadId_;
     std::unique_ptr<FileWQ> wakeUpWQ_;
 
-    std::atomic<int> irqNum_;
-    const int index;
-
-    static std::atomic<int> core_i;
-
+    std::thread::id threadId_;
+    std::atomic<uint> irqNum_;
 };

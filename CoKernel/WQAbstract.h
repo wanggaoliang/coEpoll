@@ -51,7 +51,7 @@ public:
         return fd_;
     }
 
-    void* getArg() const
+    void* getCore() const
     {
         return core_;
     }
