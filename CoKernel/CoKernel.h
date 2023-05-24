@@ -2,11 +2,11 @@
 #include "TimeWQ.h"
 #include "FileWQ.h"
 #include "ThreadCore.h"
-#include "../utils/SpinLock.h"
+#include "MuCore.h"
 #include "../CoRo/Lazy.h"
 #include <mutex>
 #include <memory>
-#include <map>
+#include <unordered_map>
 #include <type_traits>
 #include <concepts>
 
@@ -96,50 +96,26 @@ template <typename F>
     requires std::invocable<F>
 RunInCore(F &&func) -> RunInCore<decltype(std::declval<F>()())>;
 
-
 class CoKernel
 {
 public:
-    using FileWQMap = std::map<int, std::shared_ptr<FileWQ>>;
+    using FileWQMap = std::unordered_map<int, std::shared_ptr<FileWQ>>;
     using ThreadCorePtr = std::shared_ptr<ThreadCore>;
     using ReqIRQRet = RunInCore<int>;
 
-    
+    Lazy<void> waitFile(int, uint32_t);
 
-    
-    template <WQCallbackType T>
-    RunInCore<void> waitFile(T &&cb, int fd, uint32_t events)
-    {
-        return 
-        auto fileWQ = fileWQPtrs_.find(fd);
+    Lazy<void> waitTime(const TimeWQ::TimePoint &);
 
-        if (fileWQ == fileWQPtrs_.end())
-        {
-            return;
-        }
+    Lazy<void> CoRoLock(MuCore &);
 
-        fileWQ->second->addWait(std::forward<T>(cb), events);
-    }
-
-    template <WQCallbackType T>
-    RunInCore<void> waitTime(T &&cb, const TimeWQ::TimePoint &tp)
-    {
-        if (!timerWQPtr_)
-        {
-            timerWQPtr_.reset(new TimeWQ());
-        }
-        timerWQPtr_->addWait(std::forward<T>(cb), tp);
-    }
-
-    int createMutex();
-
-    int delMutext();
+    Lazy<void> CoRoUnlock(MuCore &);
 
     Lazy<int> updateIRQ(int, uint32_t);
 
     Lazy<int> removeIRQ(int);
 
-    void schedule(WQCallback &&);
+    void schedule(std::coroutine_handle<> &);
 
     void wakeUpReady();
 
@@ -161,10 +137,6 @@ private:
     
     Core *getNextCore();
 
-    int updateFileWQ(int, uint32_t);
-
-    int removeFileWQ(int);
-
     /* 只有主线程使用 */
     std::vector<ThreadCorePtr> thCores_;
     std::shared_ptr<Core> core_;
@@ -176,9 +148,10 @@ private:
     std::unique_ptr<TimeWQ> timerWQPtr_;
 
     FileWQMap fileWQPtrs_;
-    SpinLock fqlk;
+    MuCore fMapLk_;
 
-    std::queue<WQCallback> readyWQ_;
+    /* 处理全在非协程中 */
+    std::queue<std::coroutine_handle<>> readyWQ_;
     std::once_flag once_;
 
     static std::shared_ptr<CoKernel> kernel;

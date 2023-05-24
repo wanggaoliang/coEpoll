@@ -1,11 +1,12 @@
 
 #pragma once
+#include "Common.h"
 #include "WQAbstract.h"
 #include <queue>
 #include <vector>
 #include <chrono>
 
-class TimeWQ:public WQAbstract
+class TimeWQ :public WQAbstract
 {
 public:
 
@@ -14,24 +15,14 @@ public:
     using TimeInterval = std::chrono::microseconds;
     struct WaitItem
     {
-        WQCallback func_;
+        std::coroutine_handle<> h_;
         TimePoint when_;
 
-        WaitItem(const WQCallback &cb,
-                 const TimePoint &when):
-            func_(cb),
+        WaitItem(const std::coroutine_handle<> &h,
+                 const TimePoint &when) :
+            h_(h),
             when_(when)
-        {
-
-        }
-
-        WaitItem(WQCallback &&cb,
-                 const TimePoint &when):
-            func_(std::move(cb)),
-            when_(when)
-        {
-
-        }
+        {}
         bool operator<(const WaitItem &t) const { return when_ < t.when_; }
         bool operator>(const WaitItem &t) const { return when_ > t.when_; }
     };
@@ -44,22 +35,22 @@ public:
 
     void wakeup() override;
 
-    template<WQCallbackType T>
-    void addWait(T &&cb, const TimePoint &when)
+    void addWait(const std::coroutine_handle<> &h, const TimePoint &when)
     {
-        items_.emplace(std::forward<T>(cb), when);
+        items_.emplace(h, when);
         resetTimerfd(items_.top().when_);
     }
 
-    template<WakeCallbackType T>
+    template<typename T>
+    requires std::is_convertible_v<T,WakeCallback>
     void setWakeCallback(T &&func)
     {
-        wakeCallback = std::forward<T>(func);
+        wakeCallback_ = std::forward<T>(func);
     }
 private:
     int readTimerfd();
 
     int resetTimerfd(const TimePoint &expiration);
     std::priority_queue<WaitItem, std::vector<WaitItem>, std::greater<WaitItem>> items_;
-    WakeCallback wakeCallback;
+    WakeCallback wakeCallback_;
 };

@@ -1,21 +1,17 @@
 #pragma once
+#include "Common.h"
 #include "WQAbstract.h"
-#include <functional>
 #include <list>
-#include <unistd.h>
 
-class FileWQ:public WQAbstract
+class FileWQ :public WQAbstract
 {
 public:
     struct waitItem
     {
-        WQCallback func_;
+        std::coroutine_handle<> h_;
         uint32_t events_;
-        waitItem(const WQCallback &func, uint32_t events)
-            :func_(func), events_(events)
-        {}
-        waitItem(WQCallback &&func, uint32_t events)
-            :func_(std::move(func)), events_(events)
+        waitItem(const std::coroutine_handle<> &h, uint32_t events)
+            :h_(h), events_(events)
         {}
     };
 
@@ -24,25 +20,26 @@ public:
     ~FileWQ();
     void wakeup() override;
 
-    template<WQCallbackType T>
-    void addWait(T &&func, uint32_t events)
+    void addWait(const std::coroutine_handle<> &h, uint32_t events)
     {
-        items.emplace_back(std::forward<T>(func), events);
+        items_.emplace_back(h, events);
     }
 
-    template<WakeCallbackType T>
+    template<typename T>
+    requires std::is_convertible_v<T,WakeCallback>
     void setWakeCallback(T &&func)
     {
         wakeCallback_ = std::forward<T>(func);
     }
 
-    template<FDCallbackType T>
+    template<typename T>
+    requires std::is_convertible_v<T,FDCallback>
     void setFDCallback(T &&func)
     {
         fdCallback_ = std::forward<T>(func);
     }
 private:
-    std::list<waitItem> items;
+    std::list<waitItem> items_;
     WakeCallback wakeCallback_;
     FDCallback fdCallbck_;
 };

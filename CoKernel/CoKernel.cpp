@@ -1,4 +1,5 @@
 #include "CoKernel.h"
+#include "MuAwaiter.h"
 
 CoKernel::CoKernel(uint num) :coreNum_(num)
 {
@@ -31,50 +32,35 @@ void CoKernel::start()
     core_->loop();
 }
 
-int CoKernel::updateFileWQ(int fd, uint32_t events)
+Lazy<void> CoKernel::waitFile(int fd, uint32_t events)
 {
-    int ret;
-    fqlk.lock();
-    auto file = fileWQPtrs_.find(fd);
-    auto found = file != fileWQPtrs_.end();
-    fqlk.unlock();
-    /* fd 的创建是线程安全的因此在没有执行remove前不可能add两个相同的fd，remove前必定已add,因此两个add无竞争条件*/
-    if (!found)
+    auto fileWQ = fileWQPtrs_.find(fd);
+
+    if (fileWQ == fileWQPtrs_.end())
     {
-        auto fq = std::make_shared<FileWQ>(fd);
-        fq->setWEvents(events);
-        auto core = getNextCore();
-        ret = core->addIRQ(fq.get());
-        fqlk.lock();
-        fileWQPtrs_.insert(FileWQMap::value_type(fd, std::make_shared<FileWQ>(fd)));
-        fqlk.unlock();
+        return;
     }
-    else
-    {
-        file->second->setWEvents(events);
-        auto core = static_cast<Core *>(file->second->getArg());
-        ret = core->modIRQ(file->second.get());
-    }
-    return ret;
+
+    fileWQ->second->addWait(std::forward<T>(cb), events);
 }
 
-int CoKernel::removeFileWQ(int fd)
+Lazy<void> CoKernel::waitTime(const TimeWQ::TimePoint &tp)
 {
-    int ret = 0;
-    fqlk.lock();
-    auto file = fileWQPtrs_.find(fd);
-    auto found = file != fileWQPtrs_.end();
-    fqlk.unlock();
-    if (found)
+    if (!timerWQPtr_)
     {
-        auto core = static_cast<Core *>(file->second->getArg());
-        ret = core->removeIRQ(file->second.get());
-        fqlk.lock();
-        fileWQPtrs_.erase(fd);
-        fqlk.unlock();
+        timerWQPtr_.reset(new TimeWQ());
     }
+    timerWQPtr_->addWait(std::forward<T>(cb), tp);
+}
 
-    return ret;
+Lazy<void> CoKernel::CoRoLock(MuCore &mu)
+{
+    co_await LockAwaiter{ &mu };
+}
+
+Lazy<void> CoKernel::CoRoUnlock(MuCore &)
+{
+    co_await UnlockAwaiter{ &mu ,std::bind(&CoKernel::schedule,this) };
 }
 
 Lazy<int> CoKernel::updateIRQ(int fd, uint32_t events)
@@ -106,9 +92,9 @@ CoKernel::ReqIRQRet CoKernel::removeIRQ(int fd)
     } };
 }
 
-void CoKernel::schedule(WQCallback &&cb)
+void CoKernel::schedule(std::coroutine_handle<> &h)
 {
-    readyWQ_.emplace(std::move(cb));
+    readyWQ_.emplace(h);
 }
 
 void CoKernel::wakeUpReady()

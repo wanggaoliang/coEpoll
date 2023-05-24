@@ -12,13 +12,13 @@ FileWQ::~FileWQ()
         fdCallbck_(fd_);
     }
 
-    for (auto iter = items.begin(); iter != items.end(); )
+    for (auto iter = items_.begin(); iter != items_.end(); )
     {
             if (wakeCallback_)
             {
-                wakeCallback_(std::move(iter->func_));
+                wakeCallback_(iter->h_);
             }
-            iter = items.erase(iter);
+            iter = items_.erase(iter);
     }
 }
 
@@ -29,7 +29,7 @@ void FileWQ::wakeup()
         fdCallbck_(fd_);
     }
 
-    for (auto iter = items.begin(); iter != items.end(); )
+    for (auto iter = items_.begin(); iter != items_.end(); )
     {
         auto tevent = removeREvents(~iter->events_);
         if (!tevent)
@@ -40,9 +40,9 @@ void FileWQ::wakeup()
         {
             if (wakeCallback_)
             {
-                wakeCallback_(std::move(iter->func_));
+                wakeCallback_(iter->h_);
             }
-            iter = items.erase(iter);
+            iter = items_.erase(iter);
         }
         else
         {

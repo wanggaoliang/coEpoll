@@ -12,7 +12,7 @@ class Lazy;
 
 template <class T>
 concept HasCoAwaitMethod = requires(T &&awaitable) {
-    std::forward<T>(awaitable).coAwait();
+    std::forward<T>(awaitable).coAwait(0);
 };
 
 class LazyPromiseBase
@@ -32,7 +32,7 @@ public:
     };
 
 public:
-    LazyPromiseBase() : _index(cnt++) {}
+    LazyPromiseBase() : _tid(0) {}
 
     std::suspend_always initial_suspend() noexcept { return {}; }
 
@@ -42,15 +42,12 @@ public:
         requires HasCoAwaitMethod<Awaitable>
     auto await_transform(Awaitable &&awaitable)
     {
-            return std::forward<Awaitable>(awaitable).coAwait();
+            return std::forward<Awaitable>(awaitable).coAwait(_tid);
     }
 
     std::coroutine_handle<> _continuation;
-    uint _index;
-    static uint cnt;
+    int _tid;
 };
-
-uint LazyPromiseBase::cnt = 0;
 
 template <typename T>
 class LazyPromise : public LazyPromiseBase
@@ -122,11 +119,12 @@ struct ValueAwaiter : NonCopyable
 {
     using Handle = CoroHandle<detail::LazyPromise<T>>;
     Handle _handle;
+    int _tid;
 
-    ValueAwaiter(Handle coro) : _hadnle(coro) {}
+    ValueAwaiter(Handle coro,int tid) : _hadnle(coro),_tid(tid) {}
 
     ValueAwaiter(ValueAwaiter &&other)
-        : _handle(std::exchange(other._handle, nullptr))
+        : _handle(std::exchange(other._handle, nullptr)),_tid(other._tid)
     {}
 
     ~ValueAwaiter()
@@ -141,6 +139,7 @@ struct ValueAwaiter : NonCopyable
     ValueAwaiter &operator=(ValueAwaiter &&other)
     {
         std::swap(_handle, other._handle);
+        _tid = other._tid;
         return *this;
     }
 
@@ -151,6 +150,7 @@ struct ValueAwaiter : NonCopyable
     {
         // current coro started, caller becomes my continuation
         this->_handle.promise()._continuation = continuation;
+        this->_handle.promise()._tid = _tid;
         return this->_handle;
     }
 
@@ -212,14 +212,14 @@ public:
         return !_coro || _coro.done();
     }
 
-    auto operator co_await()
+    auto operator co_await(int tid)
     {
-        return ValueAwaiter(std::exchange(_coro, nullptr));
+        return ValueAwaiter(std::exchange(_coro, nullptr),tid);
     }
 
-    auto coAwait()
+    auto coAwait(int tid)
     {
-        return ValueAwaiter(std::exchange(_coro, nullptr));
+        return ValueAwaiter(std::exchange(_coro, nullptr),tid);
     }
 protected:
     Handle _coro;

@@ -18,10 +18,10 @@ TimeWQ::~TimeWQ()
     readTimerfd();
     while (!items_.empty())
     {
-        if (wakeCallback)
+        if (wakeCallback_)
         {
             auto it = items_.top();
-            wakeCallback(std::move(it.func_));
+            wakeCallback_(it.h_);
         }
         items_.pop();
     }
@@ -35,10 +35,10 @@ void TimeWQ::wakeup()
     {
         if (items_.top().when_ <= now)
         {
-            if (wakeCallback)
+            if (wakeCallback_)
             {
                 auto it = items_.top();
-                wakeCallback(std::move(it.func_));
+                wakeCallback_(it.h_);
             }
             items_.pop();
         }

@@ -1,6 +1,6 @@
 #pragma once
-#include "Common.h"
 #include <atomic>
+#include <vector>
 #include <unistd.h>
 class WQAbstract
 {
@@ -62,7 +62,7 @@ protected:
     std::atomic<uint> wevents_;
 
     /* 不可修改 */
-    const void *core_;
+    void *const core_;
     int fd_;
 };
 
