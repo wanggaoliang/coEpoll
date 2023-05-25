@@ -7,12 +7,19 @@
 #include <variant>
 #include <coroutine>
 #include "../utils/NonCopyable.h"
+#include "../utils/Attribute.h"
 template <typename T>
 class Lazy;
 
 template <class T>
 concept HasCoAwaitMethod = requires(T &&awaitable) {
-    std::forward<T>(awaitable).coAwait(0);
+    std::forward<T>(awaitable).coAwait();
+};
+
+template<class T>
+concept HasTid = requires(T a)
+{
+    {a._tid}->std::same_as<int>;
 };
 
 class LazyPromiseBase
@@ -42,7 +49,7 @@ public:
         requires HasCoAwaitMethod<Awaitable>
     auto await_transform(Awaitable &&awaitable)
     {
-            return std::forward<Awaitable>(awaitable).coAwait(_tid);
+            return std::forward<Awaitable>(awaitable).coAwait();
     }
 
     std::coroutine_handle<> _continuation;
@@ -117,14 +124,16 @@ public:
 template <typename T>
 struct ValueAwaiter : NonCopyable
 {
-    using Handle = CoroHandle<detail::LazyPromise<T>>;
+    
+    using Handle = std::coroutine_handle<LazyPromise<T>>;
+    
     Handle _handle;
     int _tid;
 
-    ValueAwaiter(Handle coro,int tid) : _hadnle(coro),_tid(tid) {}
+    ValueAwaiter(Handle coro) : _hadnle(coro) {}
 
     ValueAwaiter(ValueAwaiter &&other)
-        : _handle(std::exchange(other._handle, nullptr)),_tid(other._tid)
+        : _handle(std::exchange(other._handle, nullptr))
     {}
 
     ~ValueAwaiter()
@@ -139,18 +148,19 @@ struct ValueAwaiter : NonCopyable
     ValueAwaiter &operator=(ValueAwaiter &&other)
     {
         std::swap(_handle, other._handle);
-        _tid = other._tid;
         return *this;
     }
 
     bool await_ready() const noexcept { return false; }
 
+    template<typename PromiseType>
+    requires HasTid<PromiseType>
     AS_INLINE auto await_suspend(
-        std::coroutine_handle<> continuation) noexcept
+        std::coroutine_handle<PromiseType> continuation) noexcept
     {
         // current coro started, caller becomes my continuation
         this->_handle.promise()._continuation = continuation;
-        this->_handle.promise()._tid = _tid;
+        this->_handle.promise()._tid = continuation.promise()._tid;
         return this->_handle;
     }
 
@@ -179,8 +189,8 @@ template <typename T>
 class Lazy :NonCopyable
 {
 public:
-    using promise_type = detail::LazyPromise<T>;
-    using Handle = CoroHandle<promise_type>;
+    using promise_type = LazyPromise<T>;
+    using Handle = std::coroutine_handle<promise_type>;
     using ValueType = T;
     
 
@@ -212,28 +222,27 @@ public:
         return !_coro || _coro.done();
     }
 
-    auto operator co_await(int tid)
+    auto operator co_await()
     {
-        return ValueAwaiter(std::exchange(_coro, nullptr),tid);
+        return ValueAwaiter(std::exchange(_coro, nullptr));
     }
 
-    auto coAwait(int tid)
+    auto coAwait()
     {
-        return ValueAwaiter(std::exchange(_coro, nullptr),tid);
+        return ValueAwaiter(std::exchange(_coro, nullptr));
     }
 protected:
     Handle _coro;
 };
 
 template <typename T>
-inline detail::Lazy<T> detail::LazyPromise<T>::get_return_object() noexcept
+inline Lazy<T> LazyPromise<T>::get_return_object() noexcept
 {
-return Lazy<T>(Lazy<T>::Handle::from_promise(*this));
+    return Lazy<T>(Lazy<T>::Handle::from_promise(*this));
 }
 
-template <>
-inline detail::Lazy<void> detail::LazyPromise<void>::get_return_object() noexcept
+inline Lazy<void> LazyPromise<void>::get_return_object() noexcept
 {
-return Lazy<void>(Lazy<void>::Handle::from_promise(*this));
+    return Lazy<void>(Lazy<void>::Handle::from_promise(*this));
 }
 
