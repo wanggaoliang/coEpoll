@@ -11,17 +11,6 @@
 template <typename T>
 class Lazy;
 
-template <class T>
-concept HasCoAwaitMethod = requires(T &&awaitable) {
-    std::forward<T>(awaitable).coAwait();
-};
-
-template<class T>
-concept HasTid = requires(T a)
-{
-    {a._tid}->std::same_as<int>;
-};
-
 class LazyPromiseBase
 {
 public:
@@ -46,7 +35,10 @@ public:
     FinalAwaiter final_suspend() noexcept { return {}; }
 
     template <typename Awaitable>
-        requires HasCoAwaitMethod<Awaitable>
+        requires requires(Awaitable &&awaitable)
+    {
+        std::forward<Awaitable>(awaitable).coAwait();
+    }
     auto await_transform(Awaitable &&awaitable)
     {
             return std::forward<Awaitable>(awaitable).coAwait();
@@ -130,7 +122,7 @@ struct ValueAwaiter : NonCopyable
     Handle _handle;
     int _tid;
 
-    ValueAwaiter(Handle coro) : _hadnle(coro) {}
+    ValueAwaiter(Handle coro) : _handle(coro) {}
 
     ValueAwaiter(ValueAwaiter &&other)
         : _handle(std::exchange(other._handle, nullptr))
@@ -154,7 +146,10 @@ struct ValueAwaiter : NonCopyable
     bool await_ready() const noexcept { return false; }
 
     template<typename PromiseType>
-    requires HasTid<PromiseType>
+        requires requires(PromiseType a)
+    {
+        {a._tid + 0}->std::same_as<int>;
+    }
     AS_INLINE auto await_suspend(
         std::coroutine_handle<PromiseType> continuation) noexcept
     {

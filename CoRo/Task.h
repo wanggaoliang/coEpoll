@@ -1,5 +1,6 @@
-#include "Lazy.h"
 #include "../CoKernel/CoKernel.h"
+
+class Task;
 
 class TaskPromise
 {
@@ -17,20 +18,37 @@ public:
         void await_resume() noexcept {}
     };
 public:
-    TaskPromise() : _index(cnt++) {}
+    TaskPromise() : _tid(cnt++) {}
 
     InitAwaiter initial_suspend() noexcept { return {}; }
 
     std::suspend_never final_suspend() noexcept { return {}; }
 
+    Task get_return_object() noexcept;
+
     template <typename Awaitable>
-        requires HasCoAwaitMethod<Awaitable>
+        requires requires(Awaitable &&awaitable)
+    {
+        std::forward<Awaitable>(awaitable).coAwait();
+    }
     auto await_transform(Awaitable &&awaitable)
     {
         return std::forward<Awaitable>(awaitable).coAwait();
     }
 
-    std::coroutine_handle<> _continuation;
-    uint _index;
-    static uint cnt;
+    int _tid;
+    static int cnt;
 };
+
+int TaskPromise::cnt = 1;
+
+class Task
+{
+public:
+    using promise_type = TaskPromise;
+    Task(std::coroutine_handle<promise_type> coro) :h_(coro) {}
+    ~Task() = default;
+private:
+    std::coroutine_handle<promise_type> h_;
+};
+

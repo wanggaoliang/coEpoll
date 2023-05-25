@@ -7,3 +7,5 @@
 #define AS_LIKELY
 #define AS_UNLIKELY
 #endif
+
+#define AS_INLINE __attribute__((__always_inline__)) inline
