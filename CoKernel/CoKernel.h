@@ -145,13 +145,11 @@ private:
     std::atomic<uint> nextCore_;
     std::vector<Core *> cores_;
     const uint coreNum_;
-    std::unique_ptr<TimeWQ> timerWQPtr_;
 
     FileWQMap fileWQPtrs_;
     MuCore fMapLk_;
 
     /* 处理全在非协程中 */
-    std::queue<std::coroutine_handle<>> readyWQ_;
     std::once_flag once_;
 
     static std::shared_ptr<CoKernel> kernel;

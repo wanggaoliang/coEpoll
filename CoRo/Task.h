@@ -18,7 +18,7 @@ public:
         void await_resume() noexcept {}
     };
 public:
-    TaskPromise() : _tid(cnt++) {}
+    TaskPromise() : _tcb(cnt++,nullptr) {}
 
     InitAwaiter initial_suspend() noexcept { return {}; }
 
@@ -27,16 +27,19 @@ public:
     Task get_return_object() noexcept;
 
     template <typename Awaitable>
-        requires requires(Awaitable &&awaitable)
-    {
-        std::forward<Awaitable>(awaitable).coAwait();
-    }
     auto await_transform(Awaitable &&awaitable)
     {
-        return std::forward<Awaitable>(awaitable).coAwait();
+        if constexpr (HasCoAwaitMethod<Awaitable>)
+        {
+            return std::forward<Awaitable>(awaitable).coAwait();
+        }
+        else
+        {
+            return std::forward<Awaitable>(awaitable);
+        }
     }
 
-    int _tid;
+    UTCB _tcb;
     static int cnt;
 };
 

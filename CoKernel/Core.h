@@ -2,6 +2,7 @@
 #include "NonCopyable.h"
 #include "FDICU.h"
 #include "FileWQ.h"
+#include "TimeWQ.h"
 #include "../utils/LockFreeQueue.h"
 #include <memory>
 #include <vector>
@@ -52,13 +53,6 @@ public:
         }
     }
 
-    template <typename T>
-        requires std::is_convertible_v<T, std::function<void()>>
-    void setPickUP(T &&cb)
-    {
-        pickUpCbk = std::forward<T>(cb);
-    }
-
     int addIRQ(WQAbstract *WQA)
     {
         return fdICU_->updateIRQ(EPOLL_CTL_ADD, WQA);
@@ -76,14 +70,15 @@ public:
 
 private:
     std::unique_ptr<FDICU> fdICU_;
-    std::function<void()> pickUpCbk_;
     MpscQueue<WQCallback> funcs_;
 
     std::atomic<bool> looping_;
     std::atomic<bool> quit_;
 
-    int wakeupFd_;
     std::unique_ptr<FileWQ> wakeUpWQ_;
+    std::unique_ptr<TimeWQ> timerWQPtr_;
+
+    std::queue<std::coroutine_handle<>> readyRo_;
 
     std::thread::id threadId_;
     std::atomic<uint> irqNum_;

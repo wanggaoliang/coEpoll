@@ -5,6 +5,7 @@
 #include <exception>
 #include <variant>
 #include "RoCommon.h"
+#include "async_simple/coro/Lazy.h"
 template <typename T>
 class Lazy;
 
@@ -18,6 +19,7 @@ public:
         template <typename PromiseType>
         auto await_suspend(std::coroutine_handle<PromiseType> h) noexcept
         {
+            std::cout << "final and return back" << std::endl;
             return h.promise()._continuation;
         }
 
@@ -32,16 +34,10 @@ public:
     FinalAwaiter final_suspend() noexcept { return {}; }
 
     template <typename Awaitable>
+        requires HasCoAwaitMethod<Awaitable>
     auto await_transform(Awaitable &&awaitable)
     {
-        if constexpr (HasCoAwaitMethod<Awaitable>)
-        {
             return std::forward<Awaitable>(awaitable).coAwait();
-        }
-        else
-        {
-            return std::forward<Awaitable>(awaitable);
-        }
     }
 
     std::coroutine_handle<> _continuation;
@@ -76,7 +72,6 @@ public:
             AS_UNLIKELY{
                 std::rethrow_exception(std::get<std::exception_ptr>(_value));
         }
-        assert(std::holds_alternative<T>(_value));
         return std::get<T>(_value);
     }
     T &&result() &&
@@ -85,7 +80,6 @@ public:
             AS_UNLIKELY{
                 std::rethrow_exception(std::get<std::exception_ptr>(_value));
         }
-        assert(std::holds_alternative<T>(_value));
         return std::move(std::get<T>(_value));
     }
 
@@ -145,7 +139,7 @@ struct ValueAwaiter : NonCopyable
     bool await_ready() const noexcept { return false; }
 
     template<typename PromiseType>
-        requires HasUTCB<PromiseType>
+    requires HasUTCB<PromiseType>
     AS_INLINE auto await_suspend(
         std::coroutine_handle<PromiseType> continuation) noexcept
     {
@@ -171,12 +165,14 @@ struct ValueAwaiter : NonCopyable
             // We need to destroy the handle expclictly since the awaited
             // coroutine after symmetric transfer couldn't release it self any
             // more.
+            std::cout << "start to destory callee" << std::endl;
             _handle.destroy();
             _handle = nullptr;
         }
         else
         {
             auto r = std::move(_handle.promise()).result();
+            std::cout << "start to destory callee" << std::endl;
             _handle.destroy();
             _handle = nullptr;
             return r;

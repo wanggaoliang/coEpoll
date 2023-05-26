@@ -18,9 +18,6 @@ CoKernel::CoKernel(uint num) :coreNum_(num)
             co->setPickUP(std::bind(&CoKernel::wakeUpReady, this));
         }
     }
-
-    timerWQPtr_.reset(new TimeWQ(core_.get()));
-    core_->addIRQ(static_cast<WQAbstract *>(timerWQPtr_.get()));
 }
 
 void CoKernel::start()
@@ -66,21 +63,28 @@ Lazy<void> CoKernel::CoRoUnlock(MuCore &)
 Lazy<int> CoKernel::updateIRQ(int fd, uint32_t events)
 {
     Core *core = nullptr;
-    fqlk.lock();
+    int ret = 0;
+    auto tcb = co_await GetTCB{};
+    co_await CoRoLock(fMapLk_);
     auto file = fileWQPtrs_.find(fd);
     auto found = file != fileWQPtrs_.end();
     if (!found)
     {
-        core = getNextCore();
+        core = static_cast<Core *>(tcb->core);
+        auto fq = std::make_shared<FileWQ>(fd, core);
+        fq->setWEvents(events);
+        fileWQPtrs_.insert(FileWQMap::value_type{fd, fq});
+        ret = core->addIRQ(fq.get());
     }
     else
     {
         core = static_cast<Core *>(file->second->getCore());
-    }
-    auto ret = co_await ReqIRQRet{ core,[fd,events,this]() -> int {
-        return this->updateFileWQ(fd,events);
+        file->second->setWEvents(events);
+        ret = co_await ReqIRQRet{ core,[core, fq = file->second,this]() -> int {
+        return core->addIRQ(fq.get());
     } };
-    fqlk.unlock();
+    }
+    co_await CoRoUnlock(fMapLk_);
     co_return ret;
 
 }

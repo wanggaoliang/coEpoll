@@ -22,6 +22,8 @@ Core::Core()
         uint64_t tmp;
         read(fd, &tmp, sizeof(tmp));}));
     fdICU_->updateIRQ(EPOLL_CTL_ADD, wakeUpWQ_.get());
+    timerWQPtr_.reset(new TimeWQ(this));
+    fdICU_->updateIRQ(EPOLL_CTL_ADD, timerWQPtr_.get());
 }
 
 
@@ -33,7 +35,6 @@ Core::~Core()
     {
         std::this_thread::sleep_for(std::chrono::milliseconds(5));
     }
-    close(wakeupFd_);
 }
 
 
@@ -57,9 +58,11 @@ void Core::loop()
             }
         }
 
-        if (pickUpCbk_)
+        while (!readyRo_.empty())
         {
-            pickUpCbk_();
+            auto h = readyRo_.front();
+            h.resume();
+            readyRo_.pop();
         }
         fdICU_->waitIRQ(kPollTimeMs);
     }

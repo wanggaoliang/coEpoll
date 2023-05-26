@@ -1,51 +1,31 @@
-#include <algorithm>
-#include <fstream>
-#include <iostream>
-#include <string>
-#include <vector>
 #include "Lazy.h"
-#include "syncWait.h"
-#include "Socket.h"
-
-using namespace async_simple::coro;
-
-using Texts = std::vector<std::string>;
-
-Lazy<> echo(int cli)
+#include "Task.h"
+#include <iostream>
+Lazy<int> test2(int a)
 {
-    Socket client{ cli };
-    char buffer[100] = { 0 };
-    int len = 0;
-    std::cout << "ReadCLI ..." << std::endl;
-    client.read(buffer, 100);
-    buffer[0] = 's';
-    client.write(buffer, 100);
-    co_await std::suspend_never{};
+    std::cout << "start Lazy test2" << std::endl;
+    co_return a + 10;
 }
 
-Lazy<int> AsyncAccept()
-{
 
-    InetAddress temp;
-    std::cout << "ASYNCACC ..." << std::endl;
-    Socket server{ Socket::createNonblockingSocketOrDie(AF_INET) };
-    server.bindAddress({ 8888 });
-    server.setReuseAddr(true);
-    server.setReusePort(true);
-    server.listen();
-    while (true)
-    {
-        int cli = server.accept(&temp);
-        std::cout << "acc :" << temp.toIpPort() << std::endl;
-        co_await echo(cli);
-    }
-    
-    co_return 3;
+Lazy<int> test1(int a)
+{
+    std::cout << "start Lazy test1" << std::endl;
+    co_return co_await test2(a + 100);
 }
 
+Task start_sync(int c)
+{
+    std::cout << "start Task" << std::endl;
+    auto ret = co_await test1(c);
+    std::cout << "end Task:"<<ret << std::endl;
+}
 int main()
 {
-    int Num = syncAwait(AsyncAccept());
-    std::cout << "The number of 'x' in file.txt is " << Num << "\n";
-    return 0;
+    std::cout << "start main" << std::endl;
+    for (int i = 0;i < 10;i++)
+    {
+        start_sync(i);
+    }
+    
 }
