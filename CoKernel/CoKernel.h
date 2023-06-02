@@ -37,8 +37,7 @@ struct RunInCore
     {
         core_->queueInLoop([h = std::move(handle), func = std::move(func_), &ret]() mutable -> void
                            {
-            ret = func();
-            h.resume(); });
+            ret = func(); });
     }
 
     ret_type await_resume() noexcept
@@ -96,6 +95,30 @@ template <typename F>
     requires std::invocable<F>
 RunInCore(F &&func) -> RunInCore<decltype(std::declval<F>()())>;
 
+struct TimeAwaiter
+{
+    TimePoint point;
+    Core *core;
+    TimeAwaiter(const TimePoint &when, Core *co) :point(when), core(co)
+    {};
+
+    ~TimeAwaiter() = default;
+
+    bool await_ready() const noexcept
+    {
+        return false;
+    }
+
+    bool await_suspend(LockHandle h)
+    {
+        core->waitTime(h, point);
+        return true;
+    }
+
+    void await_resume() noexcept
+    {}
+};
+
 class CoKernel
 {
 public:
@@ -105,7 +128,7 @@ public:
 
     Lazy<void> waitFile(int, uint32_t);
 
-    Lazy<void> waitTime(const TimeWQ::TimePoint &);
+    Lazy<void> waitTime(const TimePoint &);
 
     Lazy<void> CoRoLock(MuCore &);
 
@@ -134,23 +157,22 @@ public:
     ~CoKernel() = default;
 private:
     CoKernel(uint);
-    
-    Core *getNextCore();
 
     /* 只有主线程使用 */
     std::vector<ThreadCorePtr> thCores_;
     std::shared_ptr<Core> core_;
 
-    /* 多线程使用，保证线程安全 */
-    std::atomic<uint> nextCore_;
-    std::vector<Core *> cores_;
+    /* 中断注册相关多线程使用，保证线程安全 */
+    
+    std::vector<Core*> irqs_;
     const uint coreNum_;
-
     FileWQMap fileWQPtrs_;
     MuCore fMapLk_;
 
+    std::queue<std::coroutine_handle<>> readyRo_;
     /* 处理全在非协程中 */
     std::once_flag once_;
-
     static std::shared_ptr<CoKernel> kernel;
 };
+
+std::shared_ptr<CoKernel> CoKernel::kernel = nullptr;

@@ -2,17 +2,16 @@
 #pragma once
 #include "Common.h"
 #include "WQAbstract.h"
-#include <queue>
-#include <vector>
 #include <chrono>
+
+using TimePoint = std::chrono::steady_clock::time_point;
+using TimeInterval = std::chrono::microseconds;
 
 class TimeWQ :public WQAbstract
 {
 public:
 
     using TimerId = uint64_t;
-    using TimePoint = std::chrono::steady_clock::time_point;
-    using TimeInterval = std::chrono::microseconds;
     struct WaitItem
     {
         std::coroutine_handle<> h_;
@@ -51,6 +50,6 @@ private:
     int readTimerfd();
 
     int resetTimerfd(const TimePoint &expiration);
-    std::priority_queue<WaitItem, std::vector<WaitItem>, std::greater<WaitItem>> items_;
+    std::list<WaitItem> items_;
     WakeCallback wakeCallback_;
 };

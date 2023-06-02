@@ -63,10 +63,29 @@ public:
         return fdICU_->updateIRQ(EPOLL_CTL_MOD, WQA);
     }
 
-    int removeIRQ(WQAbstract *WQA)
+    int delIRQ(WQAbstract *WQA)
     {
         return fdICU_->updateIRQ(EPOLL_CTL_DEL, WQA);
     }
+
+    void waitTime(const std::coroutine_handle<> &h, const TimePoint &when)
+    {
+        timerWQPtr_->addWait(h, when);
+    }
+
+    static Core *getCurCore()
+    {
+        return curCore;
+    }
+
+    static void setCurCore(Core *core)
+    {
+        curCore = core;
+    }
+
+public:
+    uint irqn;
+    uint pos;
 
 private:
     std::unique_ptr<FDICU> fdICU_;
@@ -78,8 +97,8 @@ private:
     std::unique_ptr<FileWQ> wakeUpWQ_;
     std::unique_ptr<TimeWQ> timerWQPtr_;
 
-    std::queue<std::coroutine_handle<>> readyRo_;
-
     std::thread::id threadId_;
-    std::atomic<uint> irqNum_;
+    static thread_local Core *curCore;
 };
+
+thread_local Core* Core::curCore = nullptr;

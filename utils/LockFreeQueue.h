@@ -1,8 +1,8 @@
 #pragma once
 #include <atomic>
-#include <type_traits>
+#include <concepts>
 #include <memory>
-#include <assert.h>
+#include "SpinLock.h"
 template <typename T>
 class MpscQueue
 {
@@ -27,16 +27,27 @@ class MpscQueue
      * @param input
      * @note This method can be called in multiple threads.
      */
-    void enqueue(T &&input)
+    template<typename U>
+    requires std::is_convertible_v<U,T>
+    void enqueue(U &&input)
     {
-        BufferNode *node{new BufferNode(std::move(input))};
-        BufferNode *prevhead{head_.exchange(node, std::memory_order_acq_rel)};
-        prevhead->next_.store(node, std::memory_order_release);
-    }
-    void enqueue(const T &input)
-    {
-        BufferNode *node{new BufferNode(input)};
-        BufferNode *prevhead{head_.exchange(node, std::memory_order_acq_rel)};
+        BufferNode *pres = nullptr;
+        BufferNode *nexts = nullptr;
+        {
+            std::lock_guard sgLk(sLk_);
+            pres = sHead_.load(std::memory_order_relaxed);
+            while (!(nexts = uHead_->next_.load(std::memory_order_acquire)))
+            {
+                if (uHead_ == uTail_)
+                {
+                    nexts = new BufferNode{};
+                    break;
+                }
+            }
+            sHead_ = nexts;
+        }
+        pres = std::forward<U>(input);
+        auto preu = uTail_.exchange(pres, std::memory_order_acq_rel)};
         prevhead->next_.store(node, std::memory_order_release);
     }
 
@@ -49,17 +60,23 @@ class MpscQueue
      */
     bool dequeue(T &output)
     {
-        BufferNode *tail = tail_.load(std::memory_order_relaxed);
-        BufferNode *next = tail->next_.load(std::memory_order_acquire);
-
-        if (next == nullptr)
+        BufferNode *preu = nullptr;
+        BufferNode *nextu = nullptr;
         {
-            return false;
+            std::lock_guard ugLk(uLk_);
+            preu = uHead_.load(std::memory_order_relaxed);
+            while (!(nextu = uHead_->next_.load(std::memory_order_acquire)))
+            {
+                if (uHead_ == uTail_)
+                {
+                    return false;
+                }
+            }
+            uHead_ = nextu;
+            output = std::move(nextu->data);
         }
-        output = std::move(*(next->dataPtr_));
-        delete next->dataPtr_;
-        tail_.store(next, std::memory_order_release);
-        delete tail;
+        auto pres = sTail_.exchange(node, std::memory_order_acq_rel);
+        pres->next_.store(preu, std::memory_order_release);
         return true;
     }
 
@@ -74,16 +91,21 @@ class MpscQueue
     struct BufferNode
     {
         BufferNode() = default;
-        BufferNode(const T &data) : dataPtr_(new T(data))
+        BufferNode(const T &data) : data(data)
         {
         }
-        BufferNode(T &&data) : dataPtr_(new T(std::move(data)))
+        BufferNode(T &&data) : data(std::move(data))
         {
         }
-        T *dataPtr_;
+        T data;
         std::atomic<BufferNode *> next_{nullptr};
     };
 
-    std::atomic<BufferNode *> head_;
-    std::atomic<BufferNode *> tail_;
+    std::atomic<BufferNode *> uHead_;
+    std::atomic<BufferNode *> uTail_;
+    SpinLock uLk_;
+        
+    std::atomic<BufferNode *> sHead_;
+    std::atomic<BufferNode *> sTail_;
+    SpinLock sLk_;
 };
