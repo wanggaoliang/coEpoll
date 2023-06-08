@@ -3,7 +3,7 @@
 #include "FDICU.h"
 #include "FileWQ.h"
 #include "TimeWQ.h"
-#include "../utils/LockFreeQueue.h"
+#include "../utils/MpmcQueue.h"
 #include <memory>
 #include <vector>
 #include <thread>
@@ -89,7 +89,7 @@ public:
 
 private:
     std::unique_ptr<FDICU> fdICU_;
-    MpscQueue<WQCallback> funcs_;
+    MpmcQueue<WQCallback> funcs_;
 
     std::atomic<bool> looping_;
     std::atomic<bool> quit_;

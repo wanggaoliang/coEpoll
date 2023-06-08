@@ -1,7 +1,7 @@
 #pragma once
 #include <coroutine>
 #include <atomic>
-#include "../utils/LockFreeQueue.h"
+#include "../utils/MpmcQueue.h"
 struct MuCore
 {
     struct WaitItem
@@ -13,5 +13,5 @@ struct MuCore
     std::atomic<int> tid_;
     std::atomic<uint> waiter_;
     uint index;
-    MpscQueue<WaitItem> items_;
+    MpmcQueue<WaitItem> items_;
 };
