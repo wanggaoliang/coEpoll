@@ -15,7 +15,7 @@ CoKernel::CoKernel(uint num) :coreNum_(num)
     {
         if (irq)
         {
-            irq->setPickUP(std::bind(&CoKernel::wakeUpReady, this));
+            irq->setWakeCallback(std::bind(&CoKernel::wakeUpReady, this));
         }
     }
 }
@@ -140,20 +140,14 @@ Lazy<int> CoKernel::removeIRQ(int fd)
 
 void CoKernel::schedule(std::coroutine_handle<> &h)
 {
-    readyWQ_.emplace(h);
+    readyRo_.enqueue(h);
 }
 
 void CoKernel::wakeUpReady()
 {
-    while (!readyWQ_.empty())
+    std::coroutine_handle<> h;
+    while (readyRo_.dequeue(h))
     {
-        auto func = readyWQ_.front();
-        func();
-        readyWQ_.pop();
+        h.resume();
     }
-}
-
-{
-    auto index = nextCore_.fetch_add(1, std::memory_order_acq_rel);
-    return cores_[index];
 }

@@ -14,11 +14,19 @@ FileWQ::~FileWQ()
 
     for (auto iter = items_.begin(); iter != items_.end(); )
     {
-            if (wakeCallback_)
-            {
-                wakeCallback_(iter->h_);
-            }
-            iter = items_.erase(iter);
+        if (iter->cb_)
+        {
+            iter->cb_(fd_, revents_);
+        }
+        if (wakeCallback_)
+        {
+            wakeCallback_(iter->h_);
+        }
+        else
+        {
+            iter->h_.resume();
+        }
+        iter = items_.erase(iter);
     }
 }
 
@@ -31,17 +39,26 @@ void FileWQ::wakeup()
 
     for (auto iter = items_.begin(); iter != items_.end(); )
     {
-        auto tevent = removeREvents(~iter->events_);
-        if (!tevent)
+        if (!revents_)
         {
             break;
         }
-        else if (iter->events_ & tevent)
+        else if (revents_ & iter->events_)
         {
+            if (iter->cb_)
+            {
+                iter->cb_(fd_, revents_ & iter->events_);
+            }
+            revents_ &= ~(iter->events_);
             if (wakeCallback_)
             {
                 wakeCallback_(iter->h_);
             }
+            else
+            {
+                iter->h_.resume();
+            }
+
             iter = items_.erase(iter);
         }
         else

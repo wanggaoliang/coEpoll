@@ -1,5 +1,4 @@
 #pragma once
-#include <atomic>
 #include <vector>
 #include <unistd.h>
 class WQAbstract
@@ -16,35 +15,39 @@ public:
     }
     virtual void wakeup() = 0;
 
-    uint setREvents(uint revents)
+    void setREvents(uint revents)
     {
-        return revents_.exchange(revents, std::memory_order_acq_rel);
+        revents_=revents;
     }
     
-    uint addREvents(uint revents)
+
+    void setWEvents(uint wevents)
     {
-        return revents_.fetch_or(revents, std::memory_order_acq_rel);
-    }
-    
-    uint removeREvents(uint revents)
-    {
-        return revents_.fetch_and(~revents, std::memory_order_acq_rel);
+        wevents_ = wevents;
     }
 
-    uint32_t addWEvents(uint wevents)
+    void addREvents(uint revents)
     {
-        return wevents_.fetch_or(wevents, std::memory_order_acq_rel);
+        revents_ |= revents;
     }
 
-    uint32_t setWEvents(uint wevents)
+
+    void addWEvents(uint wevents)
     {
-        return wevents_.exchange(wevents, std::memory_order_acq_rel);
+        wevents_ |= wevents;
     }
 
-    uint32_t removeWEvents(uint wevents)
+    uint getREvents() const
     {
-        return wevents_.fetch_and(~wevents, std::memory_order_acq_rel);
+        return revents_;
     }
+
+
+    uint getWEvents() const
+    {
+        return wevents_;
+    }
+
 
     int getFd() const
     {
@@ -58,8 +61,8 @@ public:
 
 protected:
     /* 读写多线程 */
-    std::atomic<uint> revents_;
-    std::atomic<uint> wevents_;
+    uint revents_;
+    uint wevents_;
 
     /* 不可修改 */
     void *const core_;

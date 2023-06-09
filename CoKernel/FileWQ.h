@@ -2,27 +2,32 @@
 #include "Common.h"
 #include "WQAbstract.h"
 #include <list>
-
+using WQCB = std::function<void(int, uint)>;
+using FDCB = std::function<void(int)>;
 class FileWQ :public WQAbstract
 {
 public:
     struct waitItem
     {
+        WQCB cb_;
         std::coroutine_handle<> h_;
         uint32_t events_;
-        waitItem(const std::coroutine_handle<> &h, uint32_t events)
-            :h_(h), events_(events)
+        waitItem(const std::coroutine_handle<> &h, uint32_t events, WQCB&& cb)
+            :h_(h), events_(events),cb_(std::move(cb))
         {}
     };
 
     FileWQ(int fd, void *core);
 
     ~FileWQ();
+    
     void wakeup() override;
-
-    void addWait(const std::coroutine_handle<> &h, uint32_t events)
+    
+    template<typename T>
+    requires std::is_convertible_v<T, WQCB>
+    void addWait(const std::coroutine_handle<> &h, uint32_t events, T &&cb)
     {
-        items_.emplace_back(h, events);
+        items_.emplace_back(h, events,std::forward<T>(cb));
     }
 
     template<typename T>
@@ -33,14 +38,14 @@ public:
     }
 
     template<typename T>
-    requires std::is_convertible_v<T,FDCallback>
+    requires std::is_convertible_v<T,FDCB>
     void setFDCallback(T &&func)
     {
-        fdCallback_ = std::forward<T>(func);
+        fdCallbck_ = std::forward<T>(func);
     }
 private:
     std::list<waitItem> items_;
     WakeCallback wakeCallback_;
-    FDCallback fdCallbck_;
+    FDCB fdCallbck_;
 };
 

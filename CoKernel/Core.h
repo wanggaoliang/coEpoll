@@ -29,7 +29,7 @@ public:
     void assertInLoopThread();
 
     template <typename T>
-        requires std::is_convertible_v<T, WQCallback>
+        requires std::is_convertible_v<T, XCoreFunc>
     void queueInLoop(T &&cb)
     {
         funcs_.enqueue(std::forward<T>(cb));
@@ -40,7 +40,7 @@ public:
     }
 
     template <typename T>
-        requires std::is_convertible_v<T, WQCallback>
+        requires std::is_convertible_v<T, XCoreFunc>
     void runInLoop(T &&cb)
     {
         if (isInLoopThread())
@@ -51,6 +51,13 @@ public:
         {
             queueInLoop(std::forward<T>(cb));
         }
+    }
+
+    template <typename T>
+        requires std::is_convertible_v<T, XCoreFunc>
+    void setWakeCallback(T &&cb)
+    {
+        wakeCallback = std::forward<T>(cb);
     }
 
     int addIRQ(WQAbstract *WQA)
@@ -78,9 +85,9 @@ public:
         return curCore;
     }
 
-    static void setCurCore(Core *core)
+    void bindCore2Thread()
     {
-        curCore = core;
+        curCore = this;
     }
 
 public:
@@ -89,7 +96,7 @@ public:
 
 private:
     std::unique_ptr<FDICU> fdICU_;
-    MpmcQueue<WQCallback> funcs_;
+    MpmcQueue<XCoreFunc> funcs_;
 
     std::atomic<bool> looping_;
     std::atomic<bool> quit_;
@@ -98,6 +105,7 @@ private:
     std::unique_ptr<TimeWQ> timerWQPtr_;
 
     std::thread::id threadId_;
+    XCoreFunc wakeCallback;
     static thread_local Core *curCore;
 };
 

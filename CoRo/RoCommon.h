@@ -3,8 +3,7 @@
 #include <coroutine>
 #include <memory>
 #include <iostream>
-#include "./utils/NonCopyable.h"
-#include "./utils/Attribute.h"
+#include "../utils/Attribute.h"
 
 struct UTCB
 {

@@ -37,7 +37,6 @@ Core::~Core()
     }
 }
 
-
 void Core::loop()
 {
     assert(!looping_);
@@ -49,20 +48,14 @@ void Core::loop()
         [this]() { looping_.store(false, std::memory_order_release); });
     while (!quit_.load(std::memory_order_acquire))
     {
-        while (!funcs_.empty())
+        XCoreFunc func;
+        while (funcs_.dequeue(func))
         {
-            WQCallback func;
-            while (funcs_.dequeue(func))
-            {
-                func();
-            }
+            func();
         }
 
-        while (!readyRo_.empty())
-        {
-            auto h = readyRo_.front();
-            h.resume();
-            readyRo_.pop();
+        if (wakeCallback){
+            wakeCallback();
         }
         fdICU_->waitIRQ(kPollTimeMs);
     }

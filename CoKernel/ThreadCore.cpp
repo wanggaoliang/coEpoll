@@ -34,7 +34,7 @@ void ThreadCore::loopFuncs()
 
     thread_local static std::shared_ptr<Core> core =
         std::make_shared<Core>();
-    Core::setCurCore(core.get());
+    core->bindCore2Thread();
     core->queueInLoop([this]() { promiseForLoop_.set_value(1); });
     promiseForCorePtr_.set_value(core);
     auto f = promiseForRun_.get_future();

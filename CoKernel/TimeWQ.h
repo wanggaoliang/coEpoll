@@ -3,6 +3,7 @@
 #include "Common.h"
 #include "WQAbstract.h"
 #include <chrono>
+#include <list>
 
 using TimePoint = std::chrono::steady_clock::time_point;
 using TimeInterval = std::chrono::microseconds;
@@ -22,8 +23,6 @@ public:
             h_(h),
             when_(when)
         {}
-        bool operator<(const WaitItem &t) const { return when_ < t.when_; }
-        bool operator>(const WaitItem &t) const { return when_ > t.when_; }
     };
 
     TimeWQ(void *);
@@ -34,11 +33,7 @@ public:
 
     void wakeup() override;
 
-    void addWait(const std::coroutine_handle<> &h, const TimePoint &when)
-    {
-        items_.emplace(h, when);
-        resetTimerfd(items_.top().when_);
-    }
+    void addWait(const std::coroutine_handle<> &, const TimePoint &);
 
     template<typename T>
     requires std::is_convertible_v<T,WakeCallback>

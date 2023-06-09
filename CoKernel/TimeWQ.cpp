@@ -16,38 +16,26 @@ TimeWQ::TimeWQ(int fd,void* core):WQAbstract(fd,core)
 TimeWQ::~TimeWQ()
 {
     readTimerfd();
-    while (!items_.empty())
+    for (auto iter = items_.begin(); iter != items_.end(); iter++)
     {
-        if (wakeCallback_)
-        {
-            auto it = items_.top();
-            wakeCallback_(it.h_);
-        }
-        items_.pop();
+        wakeCallback_(iter->h_);
     }
+    items_.clear();
 }
 
 void TimeWQ::wakeup()
 {
     const auto now = std::chrono::steady_clock::now();
     readTimerfd();
-    while (!items_.empty())
+    for (auto iter = items_.begin(); iter != items_.end(); )
     {
-        if (items_.top().when_ <= now)
+        if (iter->when_ > now)
         {
-            if (wakeCallback_)
-            {
-                auto it = items_.top();
-                wakeCallback_(it.h_);
-            }
-            items_.pop();
-        }
-        else
-        {
-            resetTimerfd(items_.top().when_);
+            resetTimerfd(iter->when_);
             break;
         }
-
+        wakeCallback_(iter->h_);
+        iter = items_.erase(iter);
     }
 }
 
@@ -80,4 +68,19 @@ int TimeWQ::resetTimerfd(const TimePoint &expiration)
     newValue.it_value.tv_nsec = static_cast<long>((microSeconds % 1000000) * 1000);
     int ret = ::timerfd_settime(fd_, 0, &newValue, &oldValue);
     return ret;
+}
+
+void TimeWQ::addWait(const std::coroutine_handle<> &h, const TimePoint &when)
+{
+    for (auto iter = items_.begin(); iter != items_.end(); iter++)
+    {
+        iter->when_ > when;
+        items_.emplace(iter, h, when);
+        if (iter == items_.begin())
+        {
+            resetTimerfd(when);
+        }
+        break;
+    }
+    
 }

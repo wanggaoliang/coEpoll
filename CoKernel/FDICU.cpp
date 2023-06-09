@@ -1,5 +1,6 @@
 #include "FDICU.h"
 #include <unistd.h>
+#include <errno.h>
 
 FDICU::FDICU()
 {
@@ -15,7 +16,7 @@ int FDICU::updateIRQ(int op, WQAbstract *WQA)
 {
     epoll_event event;
     event.data.ptr = WQA;
-    event.events = WQA->addWEvents(0);
+    event.events = WQA->getWEvents();
     auto ret = ::epoll_ctl(epoll_fd_, op, WQA->getFd(), &event);
     if (ret < 0)
     {

@@ -169,7 +169,7 @@ private:
     FileWQMap fileWQPtrs_;
     MuCore fMapLk_;
 
-    std::queue<std::coroutine_handle<>> readyRo_;
+    MpmcQueue<std::coroutine_handle<>> readyRo_;
     /* 处理全在非协程中 */
     std::once_flag once_;
     static std::shared_ptr<CoKernel> kernel;
