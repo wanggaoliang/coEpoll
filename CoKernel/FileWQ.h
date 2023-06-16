@@ -11,30 +11,35 @@ public:
     {
         WQCB cb_;
         std::coroutine_handle<> h_;
-        uint32_t events_;
-        waitItem(const std::coroutine_handle<> &h, uint32_t events, WQCB&& cb)
+        uint events_;
+        waitItem(const std::coroutine_handle<> &h, uint events, WQCB&& cb)
             :h_(h), events_(events),cb_(std::move(cb))
         {}
     };
 
-    FileWQ(int fd, void *core);
+    FileWQ(int fd, void *core):WQAbstract(fd), core_(core) {}
 
     ~FileWQ();
     
     void wakeup() override;
+
+    void *getCore() const
+    {
+        return core_;
+    }
     
     template<typename T>
     requires std::is_convertible_v<T, WQCB>
-    void addWait(const std::coroutine_handle<> &h, uint32_t events, T &&cb)
+    void addWait(const std::coroutine_handle<> &h, uint events, T &&cb)
     {
         items_.emplace_back(h, events,std::forward<T>(cb));
     }
 
     template<typename T>
-    requires std::is_convertible_v<T,WakeCallback>
+    requires std::is_convertible_v<T,WakeCB>
     void setWakeCallback(T &&func)
     {
-        wakeCallback_ = std::forward<T>(func);
+        wakeCB_ = std::forward<T>(func);
     }
 
     template<typename T>
@@ -45,7 +50,8 @@ public:
     }
 private:
     std::list<waitItem> items_;
-    WakeCallback wakeCallback_;
+    WakeCB wakeCB_;
     FDCB fdCallbck_;
+    void *const core_;
 };
 

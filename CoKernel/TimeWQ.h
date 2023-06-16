@@ -25,9 +25,9 @@ public:
         {}
     };
 
-    TimeWQ(void *);
+    TimeWQ();
 
-    TimeWQ(int, void *);
+    TimeWQ(int fd) :WQAbstract(fd) {}
 
     ~TimeWQ();
 
@@ -36,15 +36,15 @@ public:
     void addWait(const std::coroutine_handle<> &, const TimePoint &);
 
     template<typename T>
-    requires std::is_convertible_v<T,WakeCallback>
+    requires std::is_convertible_v<T,WakeCB>
     void setWakeCallback(T &&func)
     {
-        wakeCallback_ = std::forward<T>(func);
+        wakeCB_ = std::forward<T>(func);
     }
 private:
     int readTimerfd();
 
     int resetTimerfd(const TimePoint &expiration);
     std::list<WaitItem> items_;
-    WakeCallback wakeCallback_;
+    WakeCB wakeCB_;
 };

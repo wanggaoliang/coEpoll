@@ -4,7 +4,7 @@
 class WQAbstract
 {
 public:
-    WQAbstract(int fd,void* core):revents_(0), wevents_(0),fd_(fd),core_(core){}
+    WQAbstract(int fd):revents_(0), wevents_(0),fd_(fd){}
     ~WQAbstract()
     {
         if (fd_ >= 0)
@@ -54,18 +54,10 @@ public:
         return fd_;
     }
 
-    void* getCore() const
-    {
-        return core_;
-    }
-
 protected:
     /* 读写多线程 */
     uint revents_;
     uint wevents_;
-
-    /* 不可修改 */
-    void *const core_;
     int fd_;
 };
 

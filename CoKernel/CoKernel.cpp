@@ -1,5 +1,8 @@
 #include "CoKernel.h"
 #include "MuAwaiter.h"
+#include <iostream>
+
+std::shared_ptr<CoKernel> CoKernel::kernel = nullptr;
 
 CoKernel::CoKernel(uint num) :coreNum_(num)
 {
@@ -15,9 +18,11 @@ CoKernel::CoKernel(uint num) :coreNum_(num)
     {
         if (irq)
         {
-            irq->setWakeCallback(std::bind(&CoKernel::wakeUpReady, this));
+            irq->setScheCB(std::bind(&CoKernel::schedule, this));
+            irq->setTimeWakeCB(std::bind(&CoKernel::wakeUpReady, this, std::placeholders::_1));
         }
     }
+    core_->bindCore2Thread();
 }
 
 void CoKernel::start()
@@ -29,7 +34,7 @@ void CoKernel::start()
     core_->loop();
 }
 
-Lazy<void> CoKernel::waitFile(int fd, uint32_t events)
+Lazy<void> CoKernel::waitFile(int fd, uint32_t events,WQCB &cb)
 {
     co_return;
 }
@@ -44,9 +49,9 @@ Lazy<void> CoKernel::CoRoLock(MuCore &mu)
     co_await LockAwaiter{ &mu };
 }
 
-Lazy<void> CoKernel::CoRoUnlock(MuCore &)
+Lazy<void> CoKernel::CoRoUnlock(MuCore &mu)
 {
-    co_await UnlockAwaiter{ &mu ,std::bind(&CoKernel::schedule,this) };
+    co_await UnlockAwaiter{ &mu ,std::bind(&CoKernel::wakeUpReady,this,std::placeholders::_1) };
 }
 
 Lazy<int> CoKernel::updateIRQ(int fd, uint32_t events)
@@ -62,7 +67,8 @@ Lazy<int> CoKernel::updateIRQ(int fd, uint32_t events)
         core = irqs_[0];
         auto fq = std::make_shared<FileWQ>(fd, core);
         fq->setWEvents(events);
-        ret = co_await ReqIRQRet{ core,[core, fq ,this]() -> int {
+        ret = co_await ReqIRQRet{ core,[core, &fq ,this]() -> int {
+            std::cout << "do in " << std::this_thread::get_id() << std::endl;
         return core->addIRQ(fq.get());
         }};
         if (!ret)
@@ -91,7 +97,7 @@ Lazy<int> CoKernel::updateIRQ(int fd, uint32_t events)
     {
         core = static_cast<Core *>(file->second->getCore());
         file->second->setWEvents(events);
-        ret = co_await ReqIRQRet{ core,[core, fq = file->second,this]() -> int {
+        ret = co_await ReqIRQRet{ core,[core, &fq = file->second,this]() -> int {
         return core->modIRQ(fq.get());
         } };
         
@@ -111,7 +117,7 @@ Lazy<int> CoKernel::removeIRQ(int fd)
     if (found)
     {
         core = static_cast<Core*>(file->second->getCore());
-        ret = co_await ReqIRQRet{ core,[core, fq = file->second,this]() -> int {
+        ret = co_await ReqIRQRet{ core,[core, &fq = file->second,this]() -> int {
         return core->delIRQ(fq.get());
         } };
         fileWQPtrs_.erase(fd);
@@ -138,16 +144,19 @@ Lazy<int> CoKernel::removeIRQ(int fd)
 ;
 }
 
-void CoKernel::schedule(std::coroutine_handle<> &h)
+void CoKernel::wakeUpReady(std::coroutine_handle<> &h)
 {
     readyRo_.enqueue(h);
 }
 
-void CoKernel::wakeUpReady()
+bool CoKernel::schedule()
 {
     std::coroutine_handle<> h;
-    while (readyRo_.dequeue(h))
+    auto ret = readyRo_.dequeue(h);
+    if(ret)
     {
+        std::cout << Core::getCurCore()->threadId_ << ":wr2" << std::endl;
         h.resume();
     }
+    return ret;
 }

@@ -9,10 +9,9 @@ public:
     {
         bool await_ready() const noexcept { return false; }
 
-        template <typename PromiseType>
-        auto await_suspend(std::coroutine_handle<PromiseType> h) noexcept
+        auto await_suspend(std::coroutine_handle<> h) noexcept
         {
-            CoKernel::getKernel()->schedule([h = this->_handle]() mutable { h.resume(); });
+            CoKernel::getKernel()->wakeUpReady(h);
         }
 
         void await_resume() noexcept {}
@@ -25,7 +24,10 @@ public:
     std::suspend_never final_suspend() noexcept { return {}; }
 
     Task get_return_object() noexcept;
-
+    void return_void() noexcept {}
+    void unhandled_exception() noexcept
+    {
+    }
     template <typename Awaitable>
     auto await_transform(Awaitable &&awaitable)
     {
@@ -49,9 +51,14 @@ class Task
 {
 public:
     using promise_type = TaskPromise;
+    using Handle = std::coroutine_handle<promise_type>;
     Task(std::coroutine_handle<promise_type> coro) :h_(coro) {}
     ~Task() = default;
 private:
     std::coroutine_handle<promise_type> h_;
 };
 
+inline Task TaskPromise::get_return_object() noexcept
+{
+    return Task(Task::Handle::from_promise(*this));
+}

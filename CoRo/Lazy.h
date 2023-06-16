@@ -76,7 +76,6 @@ public:
             AS_UNLIKELY{
                 std::rethrow_exception(std::get<std::exception_ptr>(_value));
         }
-        assert(std::holds_alternative<T>(_value));
         return std::get<T>(_value);
     }
     T &&result() &&
@@ -85,7 +84,6 @@ public:
             AS_UNLIKELY{
                 std::rethrow_exception(std::get<std::exception_ptr>(_value));
         }
-        assert(std::holds_alternative<T>(_value));
         return std::move(std::get<T>(_value));
     }
 
@@ -114,9 +112,8 @@ public:
 };
 
 template <typename T>
-struct ValueAwaiter : NonCopyable
+struct ValueAwaiter : public NonCopyable
 {
-    
     using Handle = std::coroutine_handle<LazyPromise<T>>;
     
     Handle _handle;
@@ -185,7 +182,7 @@ struct ValueAwaiter : NonCopyable
 };
 
 template <typename T>
-class Lazy :NonCopyable
+class Lazy :public NonCopyable
 {
 public:
     using promise_type = LazyPromise<T>;

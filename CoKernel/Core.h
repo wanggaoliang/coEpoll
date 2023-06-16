@@ -35,7 +35,7 @@ public:
         funcs_.enqueue(std::forward<T>(cb));
         if (!isInLoopThread() || !looping_.load(std::memory_order_acquire))
         {
-            wakeup();
+            wakeUp();
         }
     }
 
@@ -54,10 +54,17 @@ public:
     }
 
     template <typename T>
-        requires std::is_convertible_v<T, XCoreFunc>
-    void setWakeCallback(T &&cb)
+        requires std::is_convertible_v<T, ScheCB>
+    void setScheCB(T &&cb)
     {
-        wakeCallback = std::forward<T>(cb);
+        scheCB_ = std::forward<T>(cb);
+    }
+
+    template <typename T>
+        requires std::is_convertible_v<T, WakeCB>
+    void setTimeWakeCB(T &&cb)
+    {
+        timerWQPtr_->setWakeCallback(std::forward<T>(cb));
     }
 
     int addIRQ(WQAbstract *WQA)
@@ -93,7 +100,7 @@ public:
 public:
     uint irqn;
     uint pos;
-
+    std::thread::id threadId_;
 private:
     std::unique_ptr<FDICU> fdICU_;
     MpmcQueue<XCoreFunc> funcs_;
@@ -104,9 +111,6 @@ private:
     std::unique_ptr<FileWQ> wakeUpWQ_;
     std::unique_ptr<TimeWQ> timerWQPtr_;
 
-    std::thread::id threadId_;
-    XCoreFunc wakeCallback;
+    ScheCB scheCB_;
     static thread_local Core *curCore;
 };
-
-thread_local Core* Core::curCore = nullptr;

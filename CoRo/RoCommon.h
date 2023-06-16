@@ -4,6 +4,7 @@
 #include <memory>
 #include <iostream>
 #include "../utils/Attribute.h"
+#include "../utils/NonCopyable.h"
 
 struct UTCB
 {

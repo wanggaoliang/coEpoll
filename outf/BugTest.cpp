@@ -82,16 +82,19 @@ private:
 
 Task testwwwrrr()
 {
-    for (int i = 3;i < 5;i++)
+    std::shared_ptr<A> fq{new A};
     {
-        auto ret = co_await CoKernel::getKernel()->updateIRQ(21, 0);
-        std::cout << "ret:" << ret << std::endl;
+        //auto fu = [fq]()->int {std::cout << "run1 in core:" << ":" << fq.use_count() << std::endl;return 0;};
+        std::cout << "start:" << ":" << fq.use_count() << ":" << &fq << std::endl;
+        auto qq = co_await RunInCore2{ [fq]()->int {std::cout << "run1 in core:"<<&fq << ":" << fq.use_count() << std::endl;return 0;},fq };
     }
+    std::cout << "end:" << ":" << fq.use_count() << ":" << &fq << std::endl;
+    co_return;
 }
 int main()
 {
     std::cout << "1" << std::endl;
-    CoKernel::INIT(3);
+    CoKernel::INIT(0);
     testwwwrrr();
     std::cout << "3" << std::endl;
     CoKernel::getKernel()->start();

@@ -1,10 +1,5 @@
 #include "FileWQ.h"
 
-FileWQ::FileWQ(int fd, void *core) :WQAbstract(fd, core)
-{
-
-}
-
 FileWQ::~FileWQ()
 {
     if (fdCallbck_)
@@ -18,9 +13,9 @@ FileWQ::~FileWQ()
         {
             iter->cb_(fd_, revents_);
         }
-        if (wakeCallback_)
+        if (wakeCB_)
         {
-            wakeCallback_(iter->h_);
+            wakeCB_(iter->h_);
         }
         else
         {
@@ -50,9 +45,9 @@ void FileWQ::wakeup()
                 iter->cb_(fd_, revents_ & iter->events_);
             }
             revents_ &= ~(iter->events_);
-            if (wakeCallback_)
+            if (wakeCB_)
             {
-                wakeCallback_(iter->h_);
+                wakeCB_(iter->h_);
             }
             else
             {

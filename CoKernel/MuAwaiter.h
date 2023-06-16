@@ -25,12 +25,12 @@ struct LockAwaiter
         auto old = mu_->waiter_++;
         if (!old)
         {
-            mu_->tid_.store(h.promise()._tid);
+            mu_->tid_.store(h.promise()._tcb->tid);
             return false;
         }
         else
         {
-            mu_->items_.enqueue(MuCore::WaitItem{ h.promise()._tid,h });
+            mu_->items_.enqueue(MuCore::WaitItem{ h.promise()._tcb->tid,h });
             return true;
         }
     }
@@ -42,13 +42,13 @@ struct LockAwaiter
 struct UnlockAwaiter
 {
     MuCore *mu_;
-    WakeCallback wakeCallback_;
-    UnlockAwaiter(MuCore *mu, const WakeCallback &cb) :mu_(mu), wakeCallback_(cb)
+    WakeCB wakeCB_;
+    UnlockAwaiter(MuCore *mu, const WakeCB &cb) :mu_(mu), wakeCB_(cb)
     {
 
     };
 
-    UnlockAwaiter(MuCore *mu, WakeCallback &&cb) :mu_(mu), wakeCallback_(std::move(cb))
+    UnlockAwaiter(MuCore *mu, WakeCB &&cb) :mu_(mu), wakeCB_(std::move(cb))
     {
 
     };
@@ -64,19 +64,17 @@ struct UnlockAwaiter
     {
         int ul = 0;
         MuCore::WaitItem newItem;
-        auto ret = mu_->tid_.compare_exchange_strong(h.promise()._tid, 0);
+        auto ret = mu_->tid_.compare_exchange_strong(h.promise()._tcb->tid, 0);
         if (ret)
         {
             auto old = mu_->waiter_--;
             if (old > 1)
             {
-                while (mu_->items_.dequeue(newItem))
+                while (!mu_->items_.dequeue(newItem));
+                mu_->tid_.store(newItem.tid_);
+                if (wakeCB_)
                 {
-                    mu_->tid_.store(newItem.tid_);
-                    if (wakeCallback_)
-                    {
-                        wakeCallback_(std::move(newItem.h_));
-                    }
+                    wakeCB_(newItem.h_);
                 }
             }
         }

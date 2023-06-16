@@ -5,7 +5,9 @@
 #include <signal.h>
 #include <fcntl.h>
 
-const int kPollTimeMs = 10000;
+const int kPollTimeMs = 1000;
+
+thread_local Core *Core::curCore = nullptr;
 
 Core::Core()
     :fdICU_(new FDICU()),
@@ -21,8 +23,10 @@ Core::Core()
     wakeUpWQ_->setFDCallback(std::function([](int fd) {
         uint64_t tmp;
         read(fd, &tmp, sizeof(tmp));}));
+    wakeUpWQ_->setWEvents(EPOLLIN | EPOLLET);
     fdICU_->updateIRQ(EPOLL_CTL_ADD, wakeUpWQ_.get());
-    timerWQPtr_.reset(new TimeWQ(this));
+    timerWQPtr_.reset(new TimeWQ());
+    timerWQPtr_->setWEvents(EPOLLIN | EPOLLET);
     fdICU_->updateIRQ(EPOLL_CTL_ADD, timerWQPtr_.get());
 }
 
@@ -49,14 +53,21 @@ void Core::loop()
     while (!quit_.load(std::memory_order_acquire))
     {
         XCoreFunc func;
-        while (funcs_.dequeue(func))
+        bool ret = false;
+        do
         {
-            func();
-        }
+            ret = false;
+            while (funcs_.dequeue(func))
+            {
+                func();
+            }
 
-        if (wakeCallback){
-            wakeCallback();
-        }
+            if (scheCB_)
+            {
+                ret = scheCB_();
+            }
+        } while (ret);
+        
         fdICU_->waitIRQ(kPollTimeMs);
     }
 }

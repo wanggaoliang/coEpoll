@@ -3,22 +3,17 @@
 #include <sys/timerfd.h>
 #include <memory.h>
 
-
-
-TimeWQ::TimeWQ(void *core):WQAbstract(-1, core)
+TimeWQ::TimeWQ():WQAbstract(-1)
 {
     fd_ = ::timerfd_create(CLOCK_MONOTONIC, TFD_NONBLOCK | TFD_CLOEXEC);
 }
-
-TimeWQ::TimeWQ(int fd,void* core):WQAbstract(fd,core)
-{}
 
 TimeWQ::~TimeWQ()
 {
     readTimerfd();
     for (auto iter = items_.begin(); iter != items_.end(); iter++)
     {
-        wakeCallback_(iter->h_);
+        wakeCB_(iter->h_);
     }
     items_.clear();
 }
@@ -34,7 +29,15 @@ void TimeWQ::wakeup()
             resetTimerfd(iter->when_);
             break;
         }
-        wakeCallback_(iter->h_);
+        if (wakeCB_)
+        {
+            wakeCB_(iter->h_);
+        }
+        else
+        {
+            iter->h_.resume();
+        }
+        
         iter = items_.erase(iter);
     }
 }
@@ -72,15 +75,20 @@ int TimeWQ::resetTimerfd(const TimePoint &expiration)
 
 void TimeWQ::addWait(const std::coroutine_handle<> &h, const TimePoint &when)
 {
-    for (auto iter = items_.begin(); iter != items_.end(); iter++)
+    auto iter = items_.begin();
+    for (; iter != items_.end(); iter++)
     {
-        iter->when_ > when;
-        items_.emplace(iter, h, when);
-        if (iter == items_.begin())
+
+        if (iter->when_ > when)
         {
-            resetTimerfd(when);
-        }
-        break;
+            break;
+        }  
     }
+    if (iter == items_.begin())
+    {
+        resetTimerfd(when);
+    }
+    items_.emplace(iter, h, when);
     
+
 }

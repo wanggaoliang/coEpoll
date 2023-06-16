@@ -17,10 +17,9 @@ struct RunInCore
 
     template <typename F>
     RunInCore(Core *core, F &&func) : func_(std::forward<F>(func)), core_(core)
-    {
-    }
+    {}
 
-    bool await_ready() const noexcept
+    bool await_ready() noexcept
     {
         if (core_->isInLoopThread())
         {
@@ -35,9 +34,9 @@ struct RunInCore
 
     void await_suspend(std::coroutine_handle<> handle)
     {
-        core_->queueInLoop([h = std::move(handle), func = std::move(func_), &ret]() mutable -> void
-                           {
-            ret = func(); });
+        core_->queueInLoop([h = std::move(handle), func = std::move(func_), this]() mutable -> void {
+            ret = func();
+                           });
     }
 
     ret_type await_resume() noexcept
@@ -58,10 +57,9 @@ struct RunInCore<void>
 
     template <typename F>
     RunInCore(Core *core, F &&func) : func_(std::forward<F>(func)), core_(core)
-    {
-    }
+    {}
 
-     bool await_ready() const noexcept
+    bool await_ready() const noexcept
     {
         if (core_->isInLoopThread())
         {
@@ -76,15 +74,13 @@ struct RunInCore<void>
 
     void await_suspend(std::coroutine_handle<> handle)
     {
-        core_->queueInLoop([h = std::move(handle), func = std::move(func_)]() mutable -> void
-                           {
+        core_->queueInLoop([h = std::move(handle), func = std::move(func_)]() mutable -> void {
             func();
-            h.resume(); });
+                           });
     }
 
     void await_resume() noexcept
-    {
-    }
+    {}
 
 private:
     Core *core_;
@@ -93,7 +89,7 @@ private:
 
 template <typename F>
     requires std::invocable<F>
-RunInCore(F &&func) -> RunInCore<decltype(std::declval<F>()())>;
+RunInCore(F &&func)->RunInCore<decltype(std::declval<F>()())>;
 
 struct TimeAwaiter
 {
@@ -109,7 +105,7 @@ struct TimeAwaiter
         return false;
     }
 
-    bool await_suspend(LockHandle h)
+    bool await_suspend(std::coroutine_handle<> h)
     {
         core->waitTime(h, point);
         return true;
@@ -126,7 +122,7 @@ public:
     using ThreadCorePtr = std::shared_ptr<ThreadCore>;
     using ReqIRQRet = RunInCore<int>;
 
-    Lazy<void> waitFile(int, uint32_t);
+    Lazy<void> waitFile(int, uint32_t, WQCB &);
 
     Lazy<void> waitTime(const TimePoint &);
 
@@ -138,15 +134,15 @@ public:
 
     Lazy<int> removeIRQ(int);
 
-    void schedule(std::coroutine_handle<> &);
+    void wakeUpReady(std::coroutine_handle<> &);
 
-    void wakeUpReady();
+    bool schedule();
 
     void start();
 
     static void INIT(uint num)
     {
-        kernel = std::make_shared<CoKernel>(num);
+        kernel = std::shared_ptr<CoKernel>(new CoKernel(num));
     }
 
     static std::shared_ptr<CoKernel> getKernel()
@@ -163,16 +159,13 @@ private:
     std::shared_ptr<Core> core_;
 
     /* 中断注册相关多线程使用，保证线程安全 */
-    
-    std::vector<Core*> irqs_;
+
+    std::vector<Core *> irqs_;
     const uint coreNum_;
     FileWQMap fileWQPtrs_;
     MuCore fMapLk_;
 
     MpmcQueue<std::coroutine_handle<>> readyRo_;
     /* 处理全在非协程中 */
-    std::once_flag once_;
     static std::shared_ptr<CoKernel> kernel;
 };
-
-std::shared_ptr<CoKernel> CoKernel::kernel = nullptr;
