@@ -1,17 +1,11 @@
 #pragma once
 #include <vector>
-#include <unistd.h>
 class WQAbstract
 {
 public:
     WQAbstract(int fd):revents_(0), wevents_(0),fd_(fd){}
     ~WQAbstract()
     {
-        if (fd_ >= 0)
-        {
-            ::close(fd_);
-            fd_ = -1;
-        }
     }
     virtual void wakeup() = 0;
 

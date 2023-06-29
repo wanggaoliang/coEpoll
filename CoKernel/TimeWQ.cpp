@@ -2,8 +2,9 @@
 #include <chrono>
 #include <sys/timerfd.h>
 #include <memory.h>
+#include <unistd.h>
 
-TimeWQ::TimeWQ():WQAbstract(-1)
+TimeWQ::TimeWQ() :WQAbstract(-1)
 {
     fd_ = ::timerfd_create(CLOCK_MONOTONIC, TFD_NONBLOCK | TFD_CLOEXEC);
 }
@@ -16,6 +17,12 @@ TimeWQ::~TimeWQ()
         wakeCB_(iter->h_);
     }
     items_.clear();
+    
+    if (fd_ >= 0)
+    {
+        ::close(fd_);
+        fd_ = -1;
+    }
 }
 
 void TimeWQ::wakeup()
@@ -29,15 +36,7 @@ void TimeWQ::wakeup()
             resetTimerfd(iter->when_);
             break;
         }
-        if (wakeCB_)
-        {
-            wakeCB_(iter->h_);
-        }
-        else
-        {
-            iter->h_.resume();
-        }
-        
+        wakeCB_(iter->h_);
         iter = items_.erase(iter);
     }
 }
@@ -89,6 +88,4 @@ void TimeWQ::addWait(const std::coroutine_handle<> &h, const TimePoint &when)
         resetTimerfd(when);
     }
     items_.emplace(iter, h, when);
-    
-
 }

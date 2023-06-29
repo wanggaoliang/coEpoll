@@ -6,21 +6,13 @@ FileWQ::~FileWQ()
     {
         fdCallbck_(fd_);
     }
-
     for (auto iter = items_.begin(); iter != items_.end(); )
     {
         if (iter->cb_)
         {
             iter->cb_(fd_, revents_);
         }
-        if (wakeCB_)
-        {
-            wakeCB_(iter->h_);
-        }
-        else
-        {
-            iter->h_.resume();
-        }
+        wakeCB_(iter->h_);
         iter = items_.erase(iter);
     }
 }
@@ -48,10 +40,6 @@ void FileWQ::wakeup()
             if (wakeCB_)
             {
                 wakeCB_(iter->h_);
-            }
-            else
-            {
-                iter->h_.resume();
             }
 
             iter = items_.erase(iter);

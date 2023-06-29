@@ -1,97 +1,78 @@
 #include "CoRo/Lazy.h"
 #include "CoRo/Task.h"
 #include "CoKernel/CoKernel.h"
+#include "CoKernel/ASocket.h"
 #include <iostream>
 #include <chrono>
+#include <memory>
+#include <string.h>
 
-template <typename Awaitable>
-auto ttt_transform(Awaitable &&awaitable)
+Task testconnection(int connfd)
 {
-    return std::forward<Awaitable>(awaitable);
+    char    buff[4096];
+    int     n;
+    while (true)
+    {
+        n = co_await ASocket::recv(connfd, buff, 128, 0);
+        if (n > 0)
+        {
+            buff[n] = '\0';
+            printf("recv msg from client %p %d: %s\n", buff, n, buff);
+            co_await ASocket::send(connfd, buff, 128, 0);
+        }
+        else
+        {
+            std::cout << "receive err:" << n << std::endl;
+            break;
+        }
+    }
+
+    co_await ASocket::close(connfd);
 }
-
-class A
-{
-public:
-    A() :a(0)
-    {
-        std::cout << "couns A" << std::endl;
-    }
-    ~A()
-    {
-        std::cout << "~ A" << std::endl;
-    }
-    int a;
-};
-struct base
-{
-    base() { std::cout << "base" << std::endl; }
-    ~base() { std::cout << "~base" << std::endl; }
-};
-struct RunInCore2:public base
-{
-    using ret_type = int;
-
-    template <typename F>
-    RunInCore2(F &&func, std::shared_ptr<A> &fq) : func_(func), fq_(fq)
-    {
-        a = 0;
-        std::cout << "cRIC:" << fq_.use_count() << std::endl;
-    }
-
-    RunInCore2(const RunInCore2 &old) : func_(old.func_),  ret(old.ret), fq_(old.fq_)
-    {
-        a = 1;
-        std::cout << "lRIC:" << fq_.use_count() << std::endl;
-    }
-
-    RunInCore2(RunInCore2 &&old) : func_(old.func_), ret(std::move(old.ret)), fq_(old.fq_)
-    {
-        a = 2;
-        std::cout << "rRIC:" << fq_.use_count() << std::endl;
-    }
-
-    ~RunInCore2()
-    {
-        std::cout << "~RIC:" << a << ":" << fq_.use_count() << std::endl;
-    }
-
-    bool await_ready() noexcept
-    {
-        
-            ret = func_();
-            return true;
-    }
-
-    void await_suspend(std::coroutine_handle<> handle)
-    {
-    }
-
-    ret_type await_resume() noexcept
-    {
-        std::cout << "resume" << std::endl;
-        return ret;
-    }
-
-private:
-    ret_type ret;
-    int a;
-    std::shared_ptr<A> &fq_;
-    std::function<ret_type()> func_;
-};
 
 Task testwwwrrr()
 {
-    for (int i = 3;i < 5;i++)
+    int    listenfd, connfd;
+    struct sockaddr_in     servaddr;
+    int ret = 0;
+    int one = 1;
+
+    if ((listenfd = co_await ASocket::socket(AF_INET, SOCK_STREAM, 0)) == -1)
     {
-        auto ret = co_await CoKernel::getKernel()->updateIRQ(21, 0);
-        std::cout << "ret:" << ret << std::endl;
+        exit(0);
     }
+    setsockopt(listenfd, SOL_SOCKET, SO_REUSEADDR, &one, sizeof(one));
+    memset(&servaddr, 0, sizeof(servaddr));
+    servaddr.sin_family = AF_INET;
+    servaddr.sin_addr.s_addr = htonl(INADDR_ANY);
+    servaddr.sin_port = htons(6666);
+
+    if (bind(listenfd, (struct sockaddr *) &servaddr, sizeof(servaddr)) == -1)
+    {
+        exit(0);
+    }
+
+    if ((ret = co_await ASocket::listen(listenfd, 10)) == -1)
+    {
+        printf("listen socket error: %s(errno: %d)\n", strerror(errno), errno);
+        exit(0);
+    }
+
+    while (true){
+        connfd = co_await ASocket::accept(listenfd, NULL, NULL);
+        std::cout << "accept:" << connfd << std::endl;
+        if (connfd < 0)
+        {
+            continue;
+        }
+        testconnection(connfd);
+    }
+    co_await ASocket::close(listenfd);
 }
 int main()
 {
     std::cout << "1" << std::endl;
-    CoKernel::INIT(3);
+    CoKernel::INIT(2);
     testwwwrrr();
     std::cout << "3" << std::endl;
     CoKernel::getKernel()->start();

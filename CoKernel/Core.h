@@ -97,11 +97,16 @@ public:
         curCore = this;
     }
 
+    uint getIndex() const
+    {
+        return index;
+    }
 public:
     uint irqn;
     uint pos;
-    std::thread::id threadId_;
 private:
+    const uint index;
+    std::thread::id threadId_;
     std::unique_ptr<FDICU> fdICU_;
     MpmcQueue<XCoreFunc> funcs_;
 
@@ -113,4 +118,5 @@ private:
 
     ScheCB scheCB_;
     static thread_local Core *curCore;
+    static uint coreNum;
 };

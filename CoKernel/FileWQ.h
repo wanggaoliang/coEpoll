@@ -2,17 +2,25 @@
 #include "Common.h"
 #include "WQAbstract.h"
 #include <list>
-using WQCB = std::function<void(int, uint)>;
+
+struct ioret
+{
+    int ret;
+    bool block;
+};
+
+using WQCB = std::function<ioret(int, uint)>;
+using WQCBWrap = std::function<void(int, uint)>;
 using FDCB = std::function<void(int)>;
 class FileWQ :public WQAbstract
 {
 public:
     struct waitItem
     {
-        WQCB cb_;
+        WQCBWrap cb_;
         std::coroutine_handle<> h_;
         uint events_;
-        waitItem(const std::coroutine_handle<> &h, uint events, WQCB&& cb)
+        waitItem(const std::coroutine_handle<> &h, uint events, WQCBWrap&& cb)
             :h_(h), events_(events),cb_(std::move(cb))
         {}
     };
@@ -29,10 +37,10 @@ public:
     }
     
     template<typename T>
-    requires std::is_convertible_v<T, WQCB>
+    requires std::is_convertible_v<T, WQCBWrap>
     void addWait(const std::coroutine_handle<> &h, uint events, T &&cb)
     {
-        items_.emplace_back(h, events,std::forward<T>(cb));
+        items_.emplace_back(h, events, std::forward<T>(cb));
     }
 
     template<typename T>
@@ -48,6 +56,7 @@ public:
     {
         fdCallbck_ = std::forward<T>(func);
     }
+
 private:
     std::list<waitItem> items_;
     WakeCB wakeCB_;

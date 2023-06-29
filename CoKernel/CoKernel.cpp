@@ -6,7 +6,7 @@ std::shared_ptr<CoKernel> CoKernel::kernel = nullptr;
 
 CoKernel::CoKernel(uint num) :coreNum_(num)
 {
-    for (int i = 0;i < coreNum_;i++)
+    for (int i = 0;i < coreNum_ -1;i++)
     {
         auto cPtr = std::make_shared<ThreadCore>();
         thCores_.push_back(cPtr);
@@ -34,9 +34,27 @@ void CoKernel::start()
     core_->loop();
 }
 
-Lazy<void> CoKernel::waitFile(int fd, uint32_t events,WQCB &cb)
+Lazy<int> CoKernel::waitFile(int fd, uint32_t events, WQCB cb)
 {
-    co_return;
+    int ret = 0;
+    std::shared_ptr<FileWQ> fq;
+    co_await CoRoLock(fMapLk_);
+    auto file = fileWQPtrs_.find(fd);
+    if (file != fileWQPtrs_.end())
+    {
+        fq = file->second;
+    }
+    co_await CoRoUnlock(fMapLk_);
+    if (!fq)
+    {
+        ret = -1;
+    }
+    else
+    {
+        ret = co_await FileAwaiter{ fq ,events,std::move(cb) };
+    }
+
+    co_return ret;
 }
 
 Lazy<void> CoKernel::waitTime(const TimePoint &tp)
@@ -67,8 +85,9 @@ Lazy<int> CoKernel::updateIRQ(int fd, uint32_t events)
         core = irqs_[0];
         auto fq = std::make_shared<FileWQ>(fd, core);
         fq->setWEvents(events);
-        ret = co_await ReqIRQRet{ core,[core, &fq ,this]() -> int {
-            std::cout << "do in " << std::this_thread::get_id() << std::endl;
+        fq->setWakeCallback(std::bind(&CoKernel::wakeUpReady, this, std::placeholders::_1));
+        ret = co_await XCoreFAwaiter{ core,[core, &fq ,this]() -> int {
+            std::cout << "do in " << Core::getCurCore()->getIndex() << std::endl;
         return core->addIRQ(fq.get());
         }};
         if (!ret)
@@ -87,9 +106,9 @@ Lazy<int> CoKernel::updateIRQ(int fd, uint32_t events)
             {
                 auto temp = irqs_[0];
                 irqs_[0] = irqs_[i - 1];
-                irqs_[0]->pos = i - 1;
                 irqs_[i - 1] = temp;
-                irqs_[i - 1]->pos = 0;
+                irqs_[0]->pos = 0;
+                irqs_[i - 1]->pos = i - 1;
             }
         }
     }
@@ -97,7 +116,7 @@ Lazy<int> CoKernel::updateIRQ(int fd, uint32_t events)
     {
         core = static_cast<Core *>(file->second->getCore());
         file->second->setWEvents(events);
-        ret = co_await ReqIRQRet{ core,[core, &fq = file->second,this]() -> int {
+        ret = co_await XCoreFAwaiter{ core,[core, &fq = file->second,this]() -> int {
         return core->modIRQ(fq.get());
         } };
         
@@ -116,12 +135,11 @@ Lazy<int> CoKernel::removeIRQ(int fd)
     auto found = file != fileWQPtrs_.end();
     if (found)
     {
-        core = static_cast<Core*>(file->second->getCore());
-        ret = co_await ReqIRQRet{ core,[core, &fq = file->second,this]() -> int {
+        core = static_cast<Core *>(file->second->getCore());
+        ret = co_await XCoreFAwaiter{ core,[core, &fq = file->second,this]() -> int {
         return core->delIRQ(fq.get());
         } };
         fileWQPtrs_.erase(fd);
-
         for (i = core->pos - 1;i >= 0;i--)
         {
             if (irqs_[i]->irqn < irqs_[core->pos]->irqn)
@@ -132,10 +150,9 @@ Lazy<int> CoKernel::removeIRQ(int fd)
         irqs_[core->pos]->irqn--;
         if (i != core->pos - 1)
         {
-            auto temp = irqs_[core->pos];
             irqs_[core->pos] = irqs_[i + 1];
-            irqs_[i + 1] = temp;
-            irqs_[i + 1]->pos = core->pos;
+            irqs_[i + 1] = core;
+            irqs_[core->pos]->pos = core->pos;
             core->pos = i + 1;
         }
     }
@@ -155,7 +172,7 @@ bool CoKernel::schedule()
     auto ret = readyRo_.dequeue(h);
     if(ret)
     {
-        std::cout << Core::getCurCore()->threadId_ << ":wr2" << std::endl;
+        //std::cout << Core::getCurCore()->getIndex() << ":h.re" << std::endl;
         h.resume();
     }
     return ret;

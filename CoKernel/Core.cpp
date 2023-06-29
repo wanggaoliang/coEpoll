@@ -6,6 +6,7 @@
 #include <fcntl.h>
 
 const int kPollTimeMs = 1000;
+uint Core::coreNum = 0;
 
 thread_local Core *Core::curCore = nullptr;
 
@@ -13,7 +14,10 @@ Core::Core()
     :fdICU_(new FDICU()),
     looping_(false),
     quit_(false),
-    threadId_(std::this_thread::get_id())
+    threadId_(std::this_thread::get_id()),
+    index(coreNum++),
+    irqn(0),
+    pos(index)
 {
     int wakeupFd = ::eventfd(0, EFD_NONBLOCK | EFD_CLOEXEC);
     if (wakeupFd < 0)
@@ -39,6 +43,7 @@ Core::~Core()
     {
         std::this_thread::sleep_for(std::chrono::milliseconds(5));
     }
+    ::close(wakeUpWQ_->getFd());
 }
 
 void Core::loop()
