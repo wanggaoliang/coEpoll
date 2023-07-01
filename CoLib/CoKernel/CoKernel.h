@@ -150,8 +150,7 @@ XCoreFAwaiter(Core* core, F &&func)->XCoreFAwaiter<decltype(std::declval<F>()())
 struct TimeAwaiter
 {
     TimePoint point;
-    Core *core;
-    TimeAwaiter(const TimePoint &when, Core *co) :point(when), core(co)
+    TimeAwaiter(const TimePoint &when) :point(when)
     {};
 
     ~TimeAwaiter() = default;
@@ -163,7 +162,7 @@ struct TimeAwaiter
 
     bool await_suspend(std::coroutine_handle<> h)
     {
-        core->waitTime(h, point);
+        Core::getCurCore()->waitTime(h, point);
         return true;
     }
 
@@ -241,4 +240,114 @@ private:
     std::shared_ptr<FileWQ> fq_;
     uint events_;
     std::function<ioret(int, uint)> func_;
+};
+
+using LockHandle = std::coroutine_handle<LazyPromise<void>>;
+struct LockAwaiter
+{
+    MuCore *mu_;
+
+    LockAwaiter(MuCore *mu) :mu_(mu)
+    {
+
+    }
+
+    ~LockAwaiter() = default;
+
+    bool await_ready() const noexcept
+    {
+        return false;
+    }
+
+    bool await_suspend(LockHandle h)
+    {
+        auto old = mu_->waiter_++;
+        if (!old)
+        {
+            mu_->tid_.store(h.promise()._tcb->tid);
+            return false;
+        }
+        else
+        {
+            mu_->items_.enqueue(MuCore::WaitItem{ h.promise()._tcb->tid, h });
+            return true;
+        }
+    }
+
+    void await_resume() noexcept
+    {}
+};
+
+struct TryLockAwaiter
+{
+    MuCore *mu_;
+    bool ret;
+    TryLockAwaiter(MuCore *mu) :mu_(mu)
+    {
+
+    }
+
+    ~TryLockAwaiter() = default;
+
+    bool await_ready() const noexcept
+    {
+        return false;
+    }
+
+    bool await_suspend(LockHandle h)
+    {
+        uint no_wait = 0;
+        ret = mu_->waiter_.compare_exchange_strong(no_wait, 1U);
+        if (ret)
+        {
+            mu_->tid_.store(h.promise()._tcb->tid);
+        }
+        return false;
+    }
+
+    bool await_resume() noexcept
+    {
+        return ret;
+    }
+};
+
+struct UnlockAwaiter
+{
+    MuCore *mu_;
+    UnlockAwaiter(MuCore *mu) :mu_(mu)
+    {
+
+    };
+
+    ~UnlockAwaiter() = default;
+
+    bool await_ready() const noexcept
+    {
+        return false;
+    }
+
+    bool await_suspend(LockHandle h)
+    {
+        int ul = 0;
+        MuCore::WaitItem newItem;
+        auto ret = mu_->tid_.compare_exchange_strong(h.promise()._tcb->tid, 0);
+        if (ret)
+        {
+            auto old = mu_->waiter_--;
+            if (old > 1)
+            {
+                while (!mu_->items_.dequeue(newItem));
+                mu_->tid_.store(newItem.tid_);
+                CoKernel::getKernel()->wakeUpReady(newItem.h_);
+            }
+        }
+        else
+        {
+            //throw exception
+        }
+        return false;
+    }
+
+    void await_resume() noexcept
+    {}
 };

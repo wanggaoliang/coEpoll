@@ -1,9 +1,10 @@
-#include "CoLib/CoRo/Lazy.h"
-#include "CoLib/CoRo/Task.h"
-#include "CoLib/CoKernel/CoKernel.h"
+#include "CoRo/Lazy.h"
+#include "CoRo/Task.h"
+#include "CoKernel/CoKernel.h"
 #include <iostream>
-#include "CoLib/AMutex.h"
-#include "CoLib/ATime.h"
+#include <chrono>
+#include "CoKernel/AMutex.h"
+#include "CoKernel/ATime.h"
 coasync::AMutex amu;
 
 Task test1(int a)

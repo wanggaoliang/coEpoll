@@ -1,5 +1,4 @@
 #include "CoKernel.h"
-#include "MuAwaiter.h"
 #include <iostream>
 
 std::shared_ptr<CoKernel> CoKernel::kernel = nullptr;
@@ -59,7 +58,7 @@ Lazy<int> CoKernel::waitFile(int fd, uint32_t events, WQCB cb)
 
 Lazy<void> CoKernel::waitTime(const TimePoint &tp)
 {
-    co_await TimeAwaiter{ tp,Core::getCurCore() };
+    co_await TimeAwaiter{ tp };
 }
 
 Lazy<void> CoKernel::CoRoLock(MuCore &mu)
@@ -69,7 +68,7 @@ Lazy<void> CoKernel::CoRoLock(MuCore &mu)
 
 Lazy<void> CoKernel::CoRoUnlock(MuCore &mu)
 {
-    co_await UnlockAwaiter{ &mu ,std::bind(&CoKernel::wakeUpReady,this,std::placeholders::_1) };
+    co_await UnlockAwaiter{ &mu};
 }
 
 Lazy<int> CoKernel::updateIRQ(int fd, uint32_t events)

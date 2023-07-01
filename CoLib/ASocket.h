@@ -3,8 +3,8 @@
 #include <sys/types.h>
 #include <sys/socket.h>
 #include <netinet/in.h>
-#include "../CoRo/Lazy.h"
-namespace ASocket
+#include "CoRo/Lazy.h"
+namespace coasync
 {
     Lazy<int> socket(int af, int type, int protocol);
 

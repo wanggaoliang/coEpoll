@@ -6,5 +6,5 @@ set(CMAKE_CXX_STANDARD_REQUIRED True)
 
 add_executable(mian main.cpp)
 add_executable(client client.cpp)
-add_subdirectory(CoKernel)
-target_link_libraries(mian PRIVATE CoKernel pthread)
+add_subdirectory(CoLib)
+target_link_libraries(mian PRIVATE CoLib)
